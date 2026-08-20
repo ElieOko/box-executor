@@ -16,6 +16,9 @@ class AppBoxRuntimeApplication : Application() {
         super.onCreate()
         container = RuntimeContainer(this)
         createNotificationChannels()
+        kotlinx.coroutines.runBlocking {
+            (container.appRegistry as com.appbox.runtime.service.manager.AppRegistry).initialize()
+        }
     }
 
     private fun createNotificationChannels() {

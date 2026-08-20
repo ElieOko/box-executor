@@ -12,6 +12,7 @@ import com.appbox.runtime.core.contract.StorageServiceContract
 import com.appbox.runtime.core.event.InProcessEventBus
 import com.appbox.runtime.service.auth.AuthService
 import com.appbox.runtime.service.manager.AppRegistry
+import com.appbox.runtime.service.manager.InstalledAppScanner
 import com.appbox.runtime.service.manager.LifecycleManager
 import com.appbox.runtime.service.manager.PermissionManager
 import com.appbox.runtime.service.network.NetworkService
@@ -24,6 +25,7 @@ class RuntimeContainer(application: Application) {
     val remoteMonitor: RemoteMonitorContract = RemoteMonitorStub()
 
     val appRegistry: AppRegistryContract = AppRegistry(application, remoteMonitor)
+    val installedAppScanner = InstalledAppScanner(application)
     val permissionManager: PermissionContract = PermissionManager(appRegistry, remoteMonitor)
     val authService: AuthServiceContract = AuthService(permissionManager, remoteMonitor)
     val storageService: StorageServiceContract = StorageService(application, permissionManager)
