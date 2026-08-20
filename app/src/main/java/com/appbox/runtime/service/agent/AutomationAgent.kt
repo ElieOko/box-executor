@@ -189,8 +189,10 @@ class AutomationAgent(
     }
 
     private suspend fun buildAppsContext(): String {
-        val catalog = appRegistry.getAllApps().joinToString(", ") { "${it.displayName} [box]" }
-        val installed = installedAppScanner.scanLaunchableApps().take(40).joinToString(", ") { it.displayName }
+        val catalog = appRegistry.getAllApps().joinToString(", ") { "${it.displayName}→${it.packageName}" }
+        val installed = installedAppScanner.scanLaunchableApps().take(40).joinToString(", ") {
+            "${it.displayName}→${it.packageName}"
+        }
         return "Catalogue AppBox: $catalog | Système: $installed"
     }
 
@@ -200,7 +202,9 @@ class AutomationAgent(
     ): Result<WorkflowRun?>? {
         val memoryContext = if (userConfig.memoryEnabled) memory.buildMemoryContext() else ""
         val recentTurns = if (userConfig.memoryEnabled) memory.getRecentTurns(8) else emptyList()
-        val catalogCtx = appRegistry.getAllApps().joinToString("\n") { "- ${it.displayName} → ${it.packageName} (AppBox)" }
+        val catalogCtx = appRegistry.getAllApps().joinToString("\n") {
+            "- ${it.displayName} → package: ${it.packageName}"
+        }
 
         return openAiRouter.resolveIntentRobust(
             userText = corrected,
@@ -228,20 +232,25 @@ class AutomationAgent(
 
     private suspend fun answerDirectly(question: String): Result<WorkflowRun?>? {
         val appName = VoiceInputCorrector.extractAppName(question)
-        if (appName != null) {
-            val catalogMatch = appRegistry.getAllApps().firstOrNull {
-                it.displayName.lowercase().contains(appName) || appName.contains(it.displayName.lowercase())
-            }
-            if (catalogMatch != null) {
-                return handleCommand(
-                    AgentCommand(
-                        id = UUID.randomUUID().toString(),
-                        source = AgentCommandSource.VOICE,
-                        action = "launch_appbox_catalog",
-                        parameters = mapOf("app_name" to catalogMatch.displayName),
+        val catalogApps = appRegistry.getAllApps()
+        val systemApps = installedAppScanner.scanLaunchableApps()
+        val resolved = when {
+            appName != null -> AppLaunchResolver.resolve(appName, null, catalogApps, systemApps)
+                ?: AppLaunchResolver.resolve(AppLaunchResolver.normalizeQuery(appName), null, catalogApps, systemApps)
+            else -> null
+        }
+        if (resolved != null) {
+            return handleCommand(
+                AgentCommand(
+                    id = UUID.randomUUID().toString(),
+                    source = AgentCommandSource.VOICE,
+                    action = "launch_appbox_catalog",
+                    parameters = mapOf(
+                        "app_name" to resolved.displayName,
+                        "package_name" to resolved.packageName,
                     ),
-                )
-            }
+                ),
+            )
         }
         return openAiClient.answerConversational(
             question = question,
@@ -289,6 +298,14 @@ class AutomationAgent(
                 var params = intent.parameters.toMutableMap()
                 if (params["app_name"].isNullOrBlank()) {
                     VoiceInputCorrector.extractAppName(originalText)?.let { params["app_name"] = it }
+                }
+                if (params["package_name"].isNullOrBlank() && params["app_name"] != null) {
+                    val catalogApps = appRegistry.getAllApps()
+                    val systemApps = installedAppScanner.scanLaunchableApps()
+                    AppLaunchResolver.resolve(params["app_name"]!!, null, catalogApps, systemApps)?.let {
+                        params["package_name"] = it.packageName
+                        params["app_name"] = it.displayName
+                    }
                 }
                 handleCommand(
                     AgentCommand(

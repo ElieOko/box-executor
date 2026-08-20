@@ -12,6 +12,7 @@ import com.appbox.runtime.core.model.WorkflowExecutionContext
 import com.appbox.runtime.core.model.WorkflowNode
 import com.appbox.runtime.core.model.WorkflowNodeType
 import com.appbox.runtime.service.RuntimeContainer
+import com.appbox.runtime.service.agent.AppLaunchResolver
 import com.appbox.runtime.service.agent.PlatformStatusChecker
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -525,36 +526,33 @@ class LaunchAppByNameNodeExecutor(
         val appNameRaw = execContext.resolve(
             node.config["appName"]
                 ?: execContext.variables["app_name"]
+                ?: execContext.variables["package_name"]
                 ?: return NodeResult.Fail("appName requis"),
         )
-        val appName = appNameRaw.lowercase()
+        val packageHint = execContext.resolve(
+            node.config["packageName"]
+                ?: execContext.variables["package_name"]
+                ?: "",
+        ).takeIf { it.isNotBlank() }
         val preferBox = node.config["inBox"]?.toBooleanStrictOrNull() ?: false
 
         val catalogApps = container.appRegistry.getAllApps()
-        val catalogMatch = catalogApps.firstOrNull { it.displayName.lowercase() == appName }
-            ?: catalogApps.firstOrNull { it.displayName.lowercase().contains(appName) }
-            ?: catalogApps.firstOrNull { appName.contains(it.displayName.lowercase()) }
-
-        if (catalogMatch != null) {
-            val intent = launchIntent(catalogMatch.packageName, catalogMatch.displayName, preferBox)
-                ?: return NodeResult.Fail("Impossible d'ouvrir ${catalogMatch.displayName}")
-            context.startActivity(intent)
-            execContext.variables["launched_app"] = catalogMatch.packageName
-            execContext.log("App catalogue: ${catalogMatch.displayName}")
-            return NodeResult.Continue
-        }
-
         val systemApps = container.installedAppScanner.scanLaunchableApps()
-        val match = systemApps.firstOrNull { it.displayName.lowercase() == appName }
-            ?: systemApps.firstOrNull { it.displayName.lowercase().contains(appName) }
-            ?: systemApps.firstOrNull { appName.contains(it.displayName.lowercase()) }
-            ?: return NodeResult.Fail("Application « $appNameRaw » introuvable dans AppBox ni le système")
+        val resolved = AppLaunchResolver.resolve(appNameRaw, packageHint, catalogApps, systemApps)
+            ?: AppLaunchResolver.resolve(
+                AppLaunchResolver.normalizeQuery(appNameRaw),
+                packageHint,
+                catalogApps,
+                systemApps,
+            )
+            ?: return NodeResult.Fail("Application « $appNameRaw » introuvable")
 
-        val intent = launchIntent(match.packageName, match.displayName, preferBox)
-            ?: return NodeResult.Fail("Impossible d'ouvrir ${match.displayName}")
+        val intent = launchIntent(resolved.packageName, resolved.displayName, preferBox)
+            ?: return NodeResult.Fail("Impossible d'ouvrir ${resolved.displayName} (${resolved.packageName})")
         context.startActivity(intent)
-        execContext.variables["launched_app"] = match.packageName
-        execContext.log("App ouverte: ${match.displayName}")
+        execContext.variables["launched_app"] = resolved.packageName
+        execContext.variables["launched_app_name"] = resolved.displayName
+        execContext.log("App lancée: ${resolved.displayName} [${resolved.source}] ${resolved.packageName}")
         return NodeResult.Continue
     }
 
