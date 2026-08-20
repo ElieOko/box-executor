@@ -33,7 +33,7 @@
             "id": "n2",
             "type": "WHATSAPP_OPEN",
             "label": "Ouvrir WhatsApp",
-            "config": { "autoSend": "false" },
+            "config": { "autoSend": "true" },
             "positionX": 500,
             "positionY": 100
           },
