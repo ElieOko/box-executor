@@ -124,6 +124,41 @@ Sans Device Owner, **aucune app** ne peut garantir à 100 % l'absence de barres 
 
 ---
 
+## Exemple : exécuter `com.yvent.app` dans AppBox
+
+**Device Owner / DeviceAdminReceiver ne sont pas obligatoires** pour lancer une app dans la box AppBox. Le receiver sert uniquement au mode kiosque complet (Device Owner via ADB).
+
+### Étapes sans Device Owner
+
+1. **Installer `com.yvent.app`** sur le téléphone (APK ou Play Store)
+2. **Ouvrir AppBox Runtime** — Yvent est enregistré automatiquement si l'APK est présent (catalogue hôte)
+3. Sinon : **Ajouter** → saisir `com.yvent.app` → **Ajouter ce package**
+4. Appuyer sur **Yvent** sur l'accueil → l'app s'ouvre dans `AppBoxSessionActivity` (box VirtualDisplay)
+
+### Configuration dans le code
+
+Le package est déclaré dans `HostAppCatalog.kt` :
+
+```kotlin
+HostAppDefinition(
+    packageName = "com.yvent.app",
+    displayName = "Yvent",
+    autoRegisterOnStartup = true,
+)
+```
+
+Pour ajouter d'autres apps métier, dupliquez cette entrée avec le package souhaité.
+
+### Avec Device Owner (optionnel, appareil dédié)
+
+```bash
+adb shell dpm set-device-owner com.appbox.runtime/.admin.AppBoxDeviceAdminReceiver
+adb shell dpm set-lock-task-packages com.appbox.runtime \
+  com.appbox.runtime com.yvent.app
+```
+
+---
+
 ## Checklist déploiement production
 
 - [ ] Appareil dédié factory reset
