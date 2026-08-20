@@ -55,6 +55,7 @@ class RuntimeContainer(application: Application) {
     val hoshiPreferences = com.appbox.runtime.service.agent.HoshiPreferencesStore(application)
     val hoshiMemory = com.appbox.runtime.service.agent.HoshiMemoryStore(application)
     val contactGroups = com.appbox.runtime.service.agent.ContactGroupStore(application)
+    val eventBindingStore = com.appbox.runtime.service.workflow.WorkflowEventBindingStore(application)
     val openAiClient = com.appbox.runtime.service.agent.OpenAiClient()
 
     init {
@@ -73,6 +74,7 @@ class RuntimeContainer(application: Application) {
             preferences = hoshiPreferences,
             memory = hoshiMemory,
             contactGroups = contactGroups,
+            eventBindings = eventBindingStore,
             installedAppScanner = installedAppScanner,
             appRegistry = appRegistry,
             openAiClient = openAiClient,

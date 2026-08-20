@@ -164,15 +164,31 @@ fun OsShell(
                         onSaveConfig = viewModel::saveHoshiConfig,
                         onOpenAccessibility = viewModel::openAccessibilitySettings,
                     )
-                    OsScreen.FLOWS -> HoshiFlowsScreen(
-                        workflows = uiState.workflows,
-                        selectedWorkflow = uiState.selectedWorkflow,
-                        editMode = uiState.workflowEditMode,
-                        onSelectWorkflow = viewModel::selectWorkflow,
-                        onRunWorkflow = viewModel::runWorkflow,
-                        onToggleEditMode = viewModel::toggleWorkflowEditMode,
-                        onNodeMoved = viewModel::onWorkflowNodeMoved,
-                    )
+                    OsScreen.FLOWS -> {
+                        val editorWorkflow = uiState.flowEditorWorkflowId?.let { id ->
+                            uiState.workflows.find { it.id == id }
+                        }
+                        if (editorWorkflow != null) {
+                            FlowEditorScreen(
+                                workflow = editorWorkflow,
+                                editMode = uiState.workflowEditMode,
+                                eventBindings = uiState.eventBindings,
+                                onBack = viewModel::closeFlowEditor,
+                                onToggleEdit = viewModel::toggleWorkflowEditMode,
+                                onRun = { viewModel.runWorkflow(editorWorkflow.id) },
+                                onExpandCanvas = viewModel::expandFlowCanvas,
+                                onNodeMoved = viewModel::onWorkflowNodeMoved,
+                                onSaveEventLoop = viewModel::saveEventLoop,
+                                onRemoveEventBinding = viewModel::removeEventLoop,
+                            )
+                        } else {
+                            HoshiFlowsScreen(
+                                workflows = uiState.workflows,
+                                onOpenFlow = viewModel::openFlowEditor,
+                                onRunWorkflow = viewModel::runWorkflow,
+                            )
+                        }
+                    }
                     OsScreen.APP_PICKER -> AppPickerScreen(
                         candidates = viewModel.filteredCandidates(),
                         query = uiState.appPickerQuery,

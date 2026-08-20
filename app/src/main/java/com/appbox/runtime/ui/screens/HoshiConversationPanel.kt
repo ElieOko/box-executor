@@ -251,7 +251,7 @@ private fun EmptyConversationHint(jarvisMode: Boolean) {
             Spacer(modifier = Modifier.height(6.dp))
             Text(
                 if (jarvisMode) {
-                    "Parlez naturellement. Interrompez HOSHI en parlant pendant qu'il répond."
+                    "Parlez naturellement. HOSHI termine sa réponse avant d'écouter à nouveau."
                 } else {
                     "Dites « HOSHI » puis votre commande."
                 },
@@ -267,5 +267,5 @@ private fun statusSubtitle(status: AgentStatus, jarvisMode: Boolean): String = w
     AgentStatus.EXECUTING -> "Workflow ou réponse en cours"
     AgentStatus.ERROR -> "Réessayez ou vérifiez la configuration"
     AgentStatus.WAITING_SCHEDULE -> "Briefings et tâches planifiées actifs"
-    else -> if (jarvisMode) "Micro continu — interruption vocale activée" else "Écoute permanente"
+    else -> if (jarvisMode) "Micro continu — écoute après la réponse HOSHI" else "Écoute permanente"
 }

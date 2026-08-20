@@ -67,13 +67,78 @@ class WorkflowEngine(
     ): Result<Unit> = mutex.withLock {
         runCatching {
             val def = workflows[workflowId] ?: throw IllegalArgumentException("Workflow inconnu")
+            val snappedX = snap(positionX)
+            val snappedY = snap(positionY)
             val updatedNodes = def.nodes.map { node ->
-                if (node.id == nodeId) node.copy(positionX = positionX, positionY = positionY) else node
+                if (node.id == nodeId) node.copy(positionX = snappedX, positionY = snappedY) else node
             }
             val updated = def.copy(nodes = updatedNodes)
             workflows[workflowId] = updated
             store.saveWorkflows(workflows.values.toList())
         }
+    }
+
+    suspend fun expandCanvas(workflowId: String, extraWidth: Float = 600f, extraHeight: Float = 400f): Result<WorkflowDefinition> =
+        mutex.withLock {
+            runCatching {
+                val def = workflows[workflowId] ?: throw IllegalArgumentException("Workflow inconnu")
+                val updated = def.copy(
+                    canvasWidth = (def.canvasWidth + extraWidth).coerceAtMost(5200f),
+                    canvasHeight = (def.canvasHeight + extraHeight).coerceAtMost(3600f),
+                )
+                workflows[workflowId] = updated
+                store.saveWorkflows(workflows.values.toList())
+                updated
+            }
+        }
+
+    suspend fun ensurePublishEventNode(
+        workflowId: String,
+        topic: String,
+    ): Result<WorkflowDefinition> = mutex.withLock {
+        runCatching {
+            val def = workflows[workflowId] ?: throw IllegalArgumentException("Workflow inconnu")
+            val existing = def.nodes.firstOrNull { it.type == WorkflowNodeType.PUBLISH_EVENT }
+            if (existing != null) {
+                val updatedNodes = def.nodes.map { node ->
+                    if (node.id == existing.id) {
+                        node.copy(config = node.config + mapOf("topic" to topic))
+                    } else node
+                }
+                val updated = def.copy(nodes = updatedNodes)
+                workflows[workflowId] = updated
+                store.saveWorkflows(workflows.values.toList())
+                return@runCatching updated
+            }
+            val lastNode = def.nodes.maxByOrNull { it.positionX + it.positionY }
+            val publishId = "pub_${UUID.randomUUID()}"
+            val publishNode = com.appbox.runtime.core.model.WorkflowNode(
+                id = publishId,
+                type = WorkflowNodeType.PUBLISH_EVENT,
+                label = "Publier événement",
+                config = mapOf("topic" to topic, "payload" to "{\"workflow\":\"${def.id}\"}"),
+                positionX = (lastNode?.positionX ?: 60f) + 220f,
+                positionY = lastNode?.positionY ?: 100f,
+            )
+            val newEdges = if (lastNode != null) {
+                def.edges + com.appbox.runtime.core.model.WorkflowEdge(
+                    id = "e_$publishId",
+                    fromNodeId = lastNode.id,
+                    toNodeId = publishId,
+                )
+            } else def.edges
+            val updated = def.copy(nodes = def.nodes + publishNode, edges = newEdges)
+            workflows[workflowId] = updated
+            store.saveWorkflows(workflows.values.toList())
+            updated
+        }
+    }
+
+    private fun snap(value: Float): Float =
+        kotlin.math.round(value / GRID) * GRID
+
+    companion object {
+        private const val GRID = 20f
     }
 
     override suspend fun execute(

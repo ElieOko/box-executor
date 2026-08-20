@@ -30,6 +30,7 @@ enum class WorkflowNodeType {
     WHATSAPP_BROADCAST,
     LAUNCH_APP_BY_NAME,
     OPEN_SYSTEM_APP,
+    SEND_EMAIL,
 }
 
 @Serializable
@@ -38,6 +39,9 @@ data class WorkflowDefinition(
     val name: String,
     val description: String = "",
     val enabled: Boolean = true,
+    /** Zone de travail du canvas (px logiques) — extensible depuis l'UI */
+    val canvasWidth: Float = 2400f,
+    val canvasHeight: Float = 1600f,
     val nodes: List<WorkflowNode> = emptyList(),
     val edges: List<WorkflowEdge> = emptyList(),
 )

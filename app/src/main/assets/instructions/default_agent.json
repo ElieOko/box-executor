@@ -373,7 +373,7 @@
             "id": "n1",
             "type": "LAUNCH_APP_BY_NAME",
             "label": "Catalogue AppBox",
-            "config": { "inBox": "true", "appName": "{{app_name}}" },
+            "config": { "inBox": "false", "appName": "{{app_name}}" },
             "positionX": 300,
             "positionY": 1500
           },

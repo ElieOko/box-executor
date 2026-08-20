@@ -598,6 +598,33 @@ class OpenSystemAppNodeExecutor(
     }
 }
 
+class SendEmailNodeExecutor(
+    private val context: Context,
+) : WorkflowNodeExecutor {
+    override val type = WorkflowNodeType.SEND_EMAIL
+
+    override suspend fun execute(node: WorkflowNode, execContext: WorkflowExecutionContext): NodeResult {
+        val to = execContext.resolve(node.config["to"] ?: execContext.variables["mail_to"] ?: "")
+        val subject = execContext.resolve(node.config["subject"] ?: execContext.variables["mail_subject"] ?: "Message HOSHI")
+        val body = execContext.resolve(node.config["body"] ?: execContext.variables["mail_body"] ?: "")
+        if (to.isBlank()) return NodeResult.Fail("Destinataire email requis")
+
+        val intent = Intent(Intent.ACTION_SENDTO).apply {
+            data = Uri.parse("mailto:")
+            putExtra(Intent.EXTRA_EMAIL, arrayOf(to))
+            putExtra(Intent.EXTRA_SUBJECT, subject)
+            putExtra(Intent.EXTRA_TEXT, body)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        return runCatching {
+            context.startActivity(intent)
+            execContext.variables["mail_sent"] = "true"
+            execContext.log("Email préparé pour $to")
+            NodeResult.Continue
+        }.getOrElse { NodeResult.Fail(it.message ?: "Impossible d'ouvrir l'email") }
+    }
+}
+
 /** Passe-through pour nœuds trigger (déjà activés par le moteur) */
 class PassThroughNodeExecutor(override val type: WorkflowNodeType) : WorkflowNodeExecutor {
     override suspend fun execute(node: WorkflowNode, context: WorkflowExecutionContext): NodeResult {
@@ -626,6 +653,7 @@ fun createNodeExecutors(
         WorkflowNodeType.LAUNCH_APP to LaunchAppNodeExecutor(context),
         WorkflowNodeType.LAUNCH_APP_BY_NAME to LaunchAppByNameNodeExecutor(context, container),
         WorkflowNodeType.OPEN_SYSTEM_APP to OpenSystemAppNodeExecutor(context),
+        WorkflowNodeType.SEND_EMAIL to SendEmailNodeExecutor(context),
         WorkflowNodeType.WHATSAPP_PREPARE to WhatsAppPrepareNodeExecutor(),
         WorkflowNodeType.WHATSAPP_OPEN to WhatsAppOpenNodeExecutor(context),
         WorkflowNodeType.WHATSAPP_SEND_ACCESSIBILITY to WhatsAppSendAccessibilityNodeExecutor(),
