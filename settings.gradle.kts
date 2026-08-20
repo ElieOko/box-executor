@@ -22,6 +22,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "boxcontrol"
-include(":app")
- 
+rootProject.name = "AppBoxRuntime"
+include(":app", ":core", ":sdk")
