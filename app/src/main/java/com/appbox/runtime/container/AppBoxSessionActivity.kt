@@ -66,7 +66,6 @@ class AppBoxSessionActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         immersiveHost = ImmersiveModeHost(this)
         immersiveHost.attach()
-        LockTaskManager.enterLockTask(this)
 
         val packageName = intent.getStringExtra(EXTRA_PACKAGE_NAME)
             ?: run { finish(); return }

@@ -8,7 +8,6 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import com.appbox.runtime.AppBoxRuntimeApplication
-import com.appbox.runtime.container.LockTaskManager
 import com.appbox.runtime.service.ProcessWatchdogService
 import com.appbox.runtime.ui.screens.OsShell
 import com.appbox.runtime.ui.system.ImmersiveMode
@@ -39,7 +38,6 @@ class MainActivity : ComponentActivity() {
         }
 
         ProcessWatchdogService.start(this)
-        LockTaskManager.enterLockTask(this)
         viewModel.enterEnvironment(this)
 
         setContent {

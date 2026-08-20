@@ -301,6 +301,19 @@ fun HoshiConfigPanel(
             )
 
             Text("Microphone", color = AppBoxThemeColors.TextPrimary, fontSize = 14.sp, modifier = Modifier.padding(top = 8.dp))
+            Text(
+                "Écoute continue — le micro redémarre automatiquement après chaque phrase.",
+                color = AppBoxThemeColors.TextSecondary,
+                fontSize = 11.sp,
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("Mode épingler (Lock Task)", color = AppBoxThemeColors.TextSecondary, fontSize = 12.sp)
+                Switch(checked = config.lockTaskEnabled, onCheckedChange = { onConfigChange(config.copy(lockTaskEnabled = it)) })
+            }
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -312,7 +325,7 @@ fun HoshiConfigPanel(
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(
                     value = config.sttSilenceMs.toString(),
-                    onValueChange = { v -> v.toLongOrNull()?.coerceIn(1200, 5000)?.let { onConfigChange(config.copy(sttSilenceMs = it)) } },
+                    onValueChange = { v -> v.toLongOrNull()?.coerceIn(2000, 8000)?.let { onConfigChange(config.copy(sttSilenceMs = it)) } },
                     label = { Text("Silence (ms)") },
                     modifier = Modifier.weight(1f),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),

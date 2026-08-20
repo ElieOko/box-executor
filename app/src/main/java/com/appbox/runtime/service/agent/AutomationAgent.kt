@@ -61,6 +61,7 @@ class AutomationAgent(
 
     override suspend fun start(): Result<Unit> = runCatching {
         userConfig = preferences.getConfig()
+        com.appbox.runtime.container.LockTaskManager.enabled = userConfig.lockTaskEnabled
         loadInstructionsFromAssets().getOrThrow()
         applyInstructions(instructions!!).getOrThrow()
         val platformReport = PlatformStatusChecker.checkAll()
@@ -84,6 +85,7 @@ class AutomationAgent(
     suspend fun saveUserConfig(config: HoshiUserConfig): Result<Unit> = runCatching {
         preferences.saveConfig(config)
         userConfig = config
+        com.appbox.runtime.container.LockTaskManager.enabled = config.lockTaskEnabled
         instructions?.let { applyInstructions(it) }?.getOrThrow()
     }
 
@@ -284,7 +286,6 @@ class AutomationAgent(
                 Result.success(null)
             }
             intent.isWorkflowAction() -> {
-                intent.speak?.let { speakAndRemember(it) }
                 var params = intent.parameters.toMutableMap()
                 if (params["app_name"].isNullOrBlank()) {
                     VoiceInputCorrector.extractAppName(originalText)?.let { params["app_name"] = it }
@@ -340,7 +341,6 @@ class AutomationAgent(
             return Result.success(null)
         }
 
-        speakAndRemember("Très bien.")
         return handleCommand(
             AgentCommand(
                 id = UUID.randomUUID().toString(),

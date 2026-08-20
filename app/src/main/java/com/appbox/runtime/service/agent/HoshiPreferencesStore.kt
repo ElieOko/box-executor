@@ -55,6 +55,7 @@ class HoshiPreferencesStore(private val context: Context) {
         val techExpert = booleanPreferencesKey("tech_expert")
         val waPersonalize = booleanPreferencesKey("wa_personalize_ai")
         val defaultGroupId = stringPreferencesKey("default_contact_group_id")
+        val lockTaskEnabled = booleanPreferencesKey("lock_task_enabled")
     }
 
     val configFlow: Flow<HoshiUserConfig> = context.hoshiPrefs.data.map { prefs ->
@@ -83,13 +84,14 @@ class HoshiPreferencesStore(private val context: Context) {
             ttsVoiceName = prefs[Keys.ttsVoiceName] ?: "",
             ttsSpeechRate = prefs[Keys.ttsSpeechRate]?.toFloatOrNull() ?: 0.88f,
             ttsPitch = prefs[Keys.ttsPitch]?.toFloatOrNull() ?: 0.95f,
-            sttSilenceMs = (prefs[Keys.sttSilenceMs] ?: 2200).toLong(),
-            sttNoiseFilterEnabled = prefs[Keys.sttNoiseFilter] ?: true,
-            sttMinConfidence = prefs[Keys.sttMinConfidence]?.toFloatOrNull() ?: 0.45f,
+            sttSilenceMs = (prefs[Keys.sttSilenceMs] ?: 4500).toLong(),
+            sttNoiseFilterEnabled = prefs[Keys.sttNoiseFilter] ?: false,
+            sttMinConfidence = prefs[Keys.sttMinConfidence]?.toFloatOrNull() ?: 0.35f,
             translateNewsToFrench = prefs[Keys.translateNews] ?: true,
             techExpertMode = prefs[Keys.techExpert] ?: true,
             whatsappPersonalizeWithAi = prefs[Keys.waPersonalize] ?: true,
             defaultContactGroupId = prefs[Keys.defaultGroupId] ?: "",
+            lockTaskEnabled = prefs[Keys.lockTaskEnabled] ?: false,
         )
     }
 
@@ -128,6 +130,7 @@ class HoshiPreferencesStore(private val context: Context) {
             prefs[Keys.techExpert] = config.techExpertMode
             prefs[Keys.waPersonalize] = config.whatsappPersonalizeWithAi
             prefs[Keys.defaultGroupId] = config.defaultContactGroupId
+            prefs[Keys.lockTaskEnabled] = config.lockTaskEnabled
         }
     }
 

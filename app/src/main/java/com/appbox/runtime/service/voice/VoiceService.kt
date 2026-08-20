@@ -22,10 +22,12 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.util.Locale
 
 /**
- * Écoute vocale HOSHI — filtrage bruit, voix TTS personnalisable.
+ * Écoute vocale HOSHI — micro toujours actif, redémarrage rapide entre les cycles STT.
  */
 class VoiceService(
     context: Context,
@@ -40,11 +42,16 @@ class VoiceService(
     private var isSpeaking = false
     private var continuousEnabled = true
     private var restartPending = false
+    private var listeningActive = false
+    private var commandInFlight = false
 
     private var voiceConfig: HoshiUserConfig = HoshiUserConfig()
     private var speechStarted = false
     private var peakRms = 0f
     private var speechStartTime = 0L
+    private var lastCommandText = ""
+    private var lastCommandAt = 0L
+    private val commandMutex = Mutex()
 
     private val _lastTranscript = MutableSharedFlow<String>(extraBufferCapacity = 16)
     override val lastTranscript: SharedFlow<String> = _lastTranscript.asSharedFlow()
@@ -52,7 +59,7 @@ class VoiceService(
     private val _alwaysOn = MutableStateFlow(true)
     val alwaysOn: StateFlow<Boolean> = _alwaysOn.asStateFlow()
 
-    override val isListening: Boolean get() = continuousEnabled
+    override val isListening: Boolean get() = continuousEnabled && (listeningActive || !isSpeaking)
 
     init {
         if (SpeechRecognizer.isRecognitionAvailable(appContext)) {
@@ -62,6 +69,7 @@ class VoiceService(
     }
 
     private fun recreateRecognizer() {
+        listeningActive = false
         speechRecognizer?.destroy()
         speechRecognizer = SpeechRecognizer.createSpeechRecognizer(appContext).apply {
             setRecognitionListener(createListener())
@@ -75,21 +83,21 @@ class VoiceService(
         tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
             override fun onStart(utteranceId: String?) {
                 isSpeaking = true
-                pauseRecognition()
+                pauseRecognitionForTts()
             }
 
             override fun onDone(utteranceId: String?) {
                 isSpeaking = false
-                resumeRecognition()
+                resumeAfterTts()
             }
 
             @Deprecated("Deprecated in Java")
             override fun onError(utteranceId: String?) {
                 isSpeaking = false
-                resumeRecognition()
+                resumeAfterTts()
             }
         })
-        if (continuousEnabled) scheduleListen(delayMs = 400)
+        if (continuousEnabled) scheduleListen(delayMs = 200)
     }
 
     fun applyVoiceProfile(config: HoshiUserConfig) {
@@ -133,13 +141,13 @@ class VoiceService(
     override fun stopListening() {
         continuousEnabled = false
         _alwaysOn.value = false
-        pauseRecognition()
+        pauseRecognitionForTts()
     }
 
     override fun startContinuousListening() {
         continuousEnabled = true
         _alwaysOn.value = true
-        if (!isSpeaking) scheduleListen(delayMs = 300)
+        if (!isSpeaking) scheduleListen(delayMs = 150)
     }
 
     override fun stopContinuousListening() = stopListening()
@@ -153,58 +161,72 @@ class VoiceService(
 
     fun release() {
         continuousEnabled = false
-        pauseRecognition()
+        pauseRecognitionForTts()
         speechRecognizer?.destroy()
         tts?.stop()
         tts?.shutdown()
     }
 
-    private fun scheduleListen(delayMs: Long) {
+    private fun scheduleListen(delayMs: Long = 120L) {
         if (!continuousEnabled || restartPending || isSpeaking) return
         restartPending = true
         scope.launch {
             delay(delayMs)
             restartPending = false
-            if (continuousEnabled && !isSpeaking) startRecognitionCycle()
+            if (continuousEnabled && !isSpeaking && !listeningActive) {
+                startRecognitionCycle()
+            }
         }
     }
 
     private fun startRecognitionCycle() {
         val recognizer = speechRecognizer ?: return
-        if (isSpeaking) return
+        if (isSpeaking || listeningActive) return
         speechStarted = false
         peakRms = 0f
         try {
-            recognizer.cancel()
-            val silence = voiceConfig.sttSilenceMs.coerceIn(1200L, 5000L)
+            val silence = voiceConfig.sttSilenceMs.coerceIn(2000L, 8000L)
             val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE, "fr-FR")
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "fr-FR")
                 putExtra(RecognizerIntent.EXTRA_ONLY_RETURN_LANGUAGE_PREFERENCE, "fr-FR")
-                putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
+                putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
                 putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 5)
+                putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, false)
                 putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, silence)
                 putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, silence)
                 putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, voiceConfig.sttMinSpeechMs)
             }
             recognizer.startListening(intent)
+            listeningActive = true
         } catch (_: Exception) {
+            listeningActive = false
             recreateRecognizer()
-            scheduleListen(delayMs = 1200)
+            scheduleListen(delayMs = 400)
         }
     }
 
-    private fun pauseRecognition() {
-        speechRecognizer?.cancel()
+    private fun pauseRecognitionForTts() {
+        listeningActive = false
+        runCatching { speechRecognizer?.stopListening() }
+        runCatching { speechRecognizer?.cancel() }
     }
 
-    private fun resumeRecognition() {
-        if (continuousEnabled) scheduleListen(delayMs = 700)
+    private fun resumeAfterTts() {
+        if (continuousEnabled) scheduleListen(delayMs = 280)
+    }
+
+    private fun finishCycleAndReschedule(delayMs: Long = 120L) {
+        listeningActive = false
+        if (continuousEnabled && !isSpeaking) scheduleListen(delayMs)
     }
 
     private fun createListener() = object : RecognitionListener {
-        override fun onReadyForSpeech(params: Bundle?) {}
+        override fun onReadyForSpeech(params: Bundle?) {
+            listeningActive = true
+        }
+
         override fun onBeginningOfSpeech() {
             speechStarted = true
             speechStartTime = System.currentTimeMillis()
@@ -216,33 +238,52 @@ class VoiceService(
 
         override fun onBufferReceived(buffer: ByteArray?) {}
         override fun onEndOfSpeech() {}
-        override fun onPartialResults(partialResults: Bundle?) {}
+
+        override fun onPartialResults(partialResults: Bundle?) {
+            // Garde la session STT active pendant que l'utilisateur parle
+        }
 
         override fun onError(error: Int) {
+            listeningActive = false
             if (!continuousEnabled || isSpeaking) return
             when (error) {
-                SpeechRecognizer.ERROR_CLIENT -> recreateRecognizer()
-                SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> recreateRecognizer()
+                SpeechRecognizer.ERROR_CLIENT,
+                SpeechRecognizer.ERROR_RECOGNIZER_BUSY,
+                -> recreateRecognizer()
             }
             val backoff = when (error) {
-                SpeechRecognizer.ERROR_NO_MATCH -> 400L
-                SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> 800L
-                SpeechRecognizer.ERROR_AUDIO -> 1200L
-                else -> 700L
+                SpeechRecognizer.ERROR_NO_MATCH -> 180L
+                SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> 250L
+                SpeechRecognizer.ERROR_AUDIO -> 500L
+                else -> 200L
             }
-            scheduleListen(delayMs = backoff)
+            finishCycleAndReschedule(backoff)
         }
 
         override fun onResults(results: Bundle?) {
+            listeningActive = false
             val texts = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION).orEmpty()
             val confidences = results?.getFloatArray(SpeechRecognizer.CONFIDENCE_SCORES)
             val text = texts.firstOrNull()?.trim()?.lowercase(Locale.FRANCE)
 
             if (shouldAcceptTranscript(text, confidences)) {
-                _lastTranscript.tryEmit(text!!)
-                scope.launch { onCommand(text) }
+                val now = System.currentTimeMillis()
+                val duplicate = text == lastCommandText && now - lastCommandAt < 2500
+                if (!duplicate && !commandInFlight) {
+                    lastCommandText = text!!
+                    lastCommandAt = now
+                    _lastTranscript.tryEmit(text)
+                    scope.launch {
+                        commandInFlight = true
+                        try {
+                            commandMutex.withLock { onCommand(text) }
+                        } finally {
+                            commandInFlight = false
+                        }
+                    }
+                }
             }
-            if (continuousEnabled && !isSpeaking) scheduleListen(delayMs = 500)
+            finishCycleAndReschedule(120L)
         }
 
         override fun onEvent(eventType: Int, params: Bundle?) {}
@@ -253,9 +294,9 @@ class VoiceService(
         if (text.length < 2 && !text.contains("hoshi")) return false
 
         if (voiceConfig.sttNoiseFilterEnabled) {
-            if (!speechStarted && peakRms < 2f) return false
+            if (!speechStarted && peakRms < 1.5f) return false
             val duration = System.currentTimeMillis() - speechStartTime
-            if (speechStartTime > 0 && duration < voiceConfig.sttMinSpeechMs / 2) return false
+            if (speechStartTime > 0 && duration < voiceConfig.sttMinSpeechMs / 3) return false
         }
 
         if (confidences != null && confidences.isNotEmpty()) {

@@ -107,14 +107,20 @@ class RuntimeViewModel(
     }
 
     fun enterEnvironment(activity: Activity) {
-        LockTaskManager.enterLockTask(activity)
-        LockTaskManager.syncWhitelist(
-            activity,
-            _uiState.value.apps.map { it.packageName },
-        )
-        ProcessWatchdogService.start(activity)
-        _uiState.update { it.copy(environmentActive = true, isLockTaskActive = true) }
-        refreshEnvironmentState()
+        viewModelScope.launch {
+            val config = container.hoshiPreferences.getConfig()
+            LockTaskManager.enabled = config.lockTaskEnabled
+            if (config.lockTaskEnabled) {
+                LockTaskManager.enterLockTask(activity)
+                LockTaskManager.syncWhitelist(
+                    activity,
+                    _uiState.value.apps.map { it.packageName },
+                )
+            }
+            ProcessWatchdogService.start(activity)
+            _uiState.update { it.copy(environmentActive = true, isLockTaskActive = config.lockTaskEnabled) }
+            refreshEnvironmentState()
+        }
     }
 
     fun exitEnvironment(activity: Activity) {

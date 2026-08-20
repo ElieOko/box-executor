@@ -29,11 +29,13 @@ data class HoshiUserConfig(
     val ttsPitch: Float = 0.95f,
     /** Nom de voix TTS Android (vide = auto meilleure voix FR) */
     val ttsVoiceName: String = "",
+    /** Désactivé temporairement — réactiver dans HOSHI si besoin */
+    val lockTaskEnabled: Boolean = false,
     /** STT — réduction bruit ambiant */
-    val sttSilenceMs: Long = 2200L,
-    val sttNoiseFilterEnabled: Boolean = true,
-    val sttMinConfidence: Float = 0.45f,
-    val sttMinSpeechMs: Long = 400L,
+    val sttSilenceMs: Long = 4500L,
+    val sttNoiseFilterEnabled: Boolean = false,
+    val sttMinConfidence: Float = 0.35f,
+    val sttMinSpeechMs: Long = 350L,
     /** Traduction automatique des news anglaises */
     val translateNewsToFrench: Boolean = true,
     /** Expertise programmation / cloud / K8s dans OpenAI */

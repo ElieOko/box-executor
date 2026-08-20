@@ -10,7 +10,12 @@ import com.appbox.runtime.admin.AppBoxDeviceAdminReceiver
 
 object LockTaskManager {
 
+    /** Épinglage écran — désactivé temporairement par défaut */
+    @Volatile
+    var enabled: Boolean = false
+
     fun enterLockTask(activity: Activity) {
+        if (!enabled) return
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) return
         runCatching { activity.startLockTask() }
     }
