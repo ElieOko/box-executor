@@ -74,6 +74,8 @@ class RuntimeContainer(application: Application) {
             memory = hoshiMemory,
             contactGroups = contactGroups,
             installedAppScanner = installedAppScanner,
+            appRegistry = appRegistry,
+            openAiClient = openAiClient,
             onSpeak = { text -> speakCallback(text) },
         )
         voiceService = VoiceService(application) { transcript ->

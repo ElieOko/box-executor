@@ -10,6 +10,7 @@ enum class WorkflowNodeType {
     TRIGGER_MANUAL,
     HTTP_FETCH,
     PARSE_HN_DIGEST,
+    PLATFORM_STATUS_CHECK,
     NOTIFY,
     LAUNCH_APP,
     WHATSAPP_PREPARE,

@@ -30,6 +30,14 @@ class MainActivity : ComponentActivity() {
         val container = (application as AppBoxRuntimeApplication).container
         viewModel = RuntimeViewModel(container, applicationContext)
 
+        if (intent?.getBooleanExtra(
+                com.appbox.runtime.service.overlay.HoshiFloatingOverlayService.EXTRA_OPEN_HOSHI,
+                false,
+            ) == true
+        ) {
+            viewModel.navigateTo(com.appbox.runtime.ui.OsScreen.AGENT)
+        }
+
         ProcessWatchdogService.start(this)
         LockTaskManager.enterLockTask(this)
         viewModel.enterEnvironment(this)

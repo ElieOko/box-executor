@@ -54,6 +54,30 @@ class OpenAiClient {
         }
     }
 
+    suspend fun answerConversational(
+        question: String,
+        config: HoshiUserConfig,
+        memoryContext: String = "",
+        appsContext: String = "",
+    ): Result<String> = withContext(Dispatchers.IO) {
+        if (config.openAiApiKey.isBlank()) {
+            return@withContext Result.failure(IllegalStateException("OpenAI non configuré"))
+        }
+        runCatching {
+            val system = buildString {
+                append(JarvisPersona.systemPromptPrefix(config))
+                appendLine()
+                if (config.techExpertMode) {
+                    appendLine("Expert en programmation, architecture, cloud native, Kubernetes, DevOps.")
+                }
+                appendLine("Réponds en français, concis pour TTS (2-4 phrases sauf question technique).")
+                if (memoryContext.isNotBlank()) appendLine("Mémoire: $memoryContext")
+                if (appsContext.isNotBlank()) appendLine("Apps disponibles: $appsContext")
+            }
+            chat(config, question, systemPrompt = system, temperature = 0.5, maxTokens = 600)
+        }
+    }
+
     suspend fun chat(
         config: HoshiUserConfig,
         userPrompt: String,

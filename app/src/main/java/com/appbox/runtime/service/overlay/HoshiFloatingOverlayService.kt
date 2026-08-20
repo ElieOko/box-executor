@@ -1,4 +1,4 @@
-package com.appbox.runtime.service
+package com.appbox.runtime.service.overlay
 
 import android.annotation.SuppressLint
 import android.app.Service
@@ -13,71 +13,49 @@ import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
-import android.widget.ImageButton
 import com.appbox.runtime.R
-import com.appbox.runtime.container.ProcessTracker
-import com.appbox.runtime.service.overlay.OverlayPositionStore
 import com.appbox.runtime.ui.MainActivity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 
-/**
- * Overlay système affiché quand une app sort de la box AppBox — icône déplaçable.
- */
-class ReturnOverlayService : Service() {
+/** Bulle HOSHI flottante — déplaçable, toujours accessible */
+class HoshiFloatingOverlayService : Service() {
 
     private var overlayView: View? = null
-    private var layoutParams: WindowManager.LayoutParams? = null
     private var windowManager: WindowManager? = null
-    private lateinit var processTracker: ProcessTracker
+    private var layoutParams: WindowManager.LayoutParams? = null
     private val positionStore by lazy { OverlayPositionStore(this) }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     override fun onCreate() {
         super.onCreate()
-        processTracker = ProcessTracker(this)
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_HIDE -> removeOverlay()
-            ACTION_SHOW -> showOverlayIfAllowed()
-            else -> updateOverlayState(
-                allowedPackages = intent?.getStringArrayListExtra(EXTRA_ALLOWED_PACKAGES).orEmpty(),
-            )
+            ACTION_SHOW -> showOverlay()
         }
         return START_STICKY
     }
 
-    private fun updateOverlayState(allowedPackages: List<String>) {
-        if (!canDrawOverlays()) {
-            removeOverlay()
-            return
-        }
-        val foreground = processTracker.getForegroundPackage()
-        val appBoxPackage = packageName
-        val isInsideBox = foreground == null ||
-            foreground == appBoxPackage ||
-            allowedPackages.contains(foreground)
-        if (isInsideBox) removeOverlay() else showOverlayIfAllowed()
-    }
-
     @SuppressLint("ClickableViewAccessibility")
-    private fun showOverlayIfAllowed() {
+    private fun showOverlay() {
         if (!canDrawOverlays() || overlayView != null) return
 
-        val pos = positionStore.getPosition(POS_KEY, defaultX = 24, defaultY = 120)
-        val view = LayoutInflater.from(this).inflate(R.layout.overlay_return_button, null)
-        view.findViewById<ImageButton>(R.id.btn_return_appbox).setOnClickListener {
+        val pos = positionStore.getPosition(POS_KEY, defaultX = 24, defaultY = 200)
+        val view = LayoutInflater.from(this).inflate(R.layout.overlay_hoshi_bubble, null)
+
+        view.setOnClickListener {
             startActivity(
                 Intent(this, MainActivity::class.java).apply {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                    putExtra(EXTRA_OPEN_HOSHI, true)
                 },
             )
-            removeOverlay()
         }
 
         val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -99,22 +77,13 @@ class ReturnOverlayService : Service() {
             y = pos.y
         }
 
-        attachDragBehavior(view, params)
-
-        windowManager?.addView(view, params)
-        overlayView = view
-        layoutParams = params
-    }
-
-    @SuppressLint("ClickableViewAccessibility")
-    private fun attachDragBehavior(view: View, params: WindowManager.LayoutParams) {
         var dragStartX = 0
         var dragStartY = 0
         var touchStartX = 0f
         var touchStartY = 0f
         var isDragging = false
 
-        view.setOnTouchListener { v, event ->
+        view.setOnTouchListener { _, event ->
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
                     dragStartX = params.x
@@ -127,23 +96,29 @@ class ReturnOverlayService : Service() {
                 MotionEvent.ACTION_MOVE -> {
                     val dx = (event.rawX - touchStartX).toInt()
                     val dy = (event.rawY - touchStartY).toInt()
-                    if (kotlin.math.abs(dx) > 10 || kotlin.math.abs(dy) > 10) isDragging = true
+                    if (kotlin.math.abs(dx) > 8 || kotlin.math.abs(dy) > 8) isDragging = true
                     params.x = dragStartX + dx
                     params.y = dragStartY + dy
-                    windowManager?.updateViewLayout(v, params)
+                    windowManager?.updateViewLayout(view, params)
                     true
                 }
                 MotionEvent.ACTION_UP -> {
                     if (isDragging) {
-                        scope.launch { positionStore.savePosition(POS_KEY, params.x, params.y) }
+                        scope.launch {
+                            positionStore.savePosition(POS_KEY, params.x, params.y)
+                        }
                     } else {
-                        v.performClick()
+                        view.performClick()
                     }
                     true
                 }
                 else -> false
             }
         }
+
+        windowManager?.addView(view, params)
+        overlayView = view
+        layoutParams = params
     }
 
     private fun removeOverlay() {
@@ -162,31 +137,18 @@ class ReturnOverlayService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     companion object {
-        const val ACTION_SHOW = "com.appbox.runtime.overlay.SHOW"
-        const val ACTION_HIDE = "com.appbox.runtime.overlay.HIDE"
-        const val EXTRA_ALLOWED_PACKAGES = "extra_allowed_packages"
-        private const val POS_KEY = "return_overlay"
+        const val ACTION_SHOW = "com.appbox.runtime.hoshi.SHOW"
+        const val ACTION_HIDE = "com.appbox.runtime.hoshi.HIDE"
+        const val EXTRA_OPEN_HOSHI = "extra_open_hoshi"
+        private const val POS_KEY = "hoshi_bubble"
 
-        fun update(context: Context, allowedPackages: List<String>) {
+        fun show(context: Context) {
             if (!Settings.canDrawOverlays(context)) return
-            context.startService(
-                Intent(context, ReturnOverlayService::class.java).apply {
-                    putStringArrayListExtra(EXTRA_ALLOWED_PACKAGES, ArrayList(allowedPackages))
-                },
-            )
+            context.startService(Intent(context, HoshiFloatingOverlayService::class.java).apply { action = ACTION_SHOW })
         }
 
         fun hide(context: Context) {
-            context.startService(Intent(context, ReturnOverlayService::class.java).apply { action = ACTION_HIDE })
-        }
-
-        fun canDrawOverlays(context: Context): Boolean = Settings.canDrawOverlays(context)
-
-        fun openOverlaySettings(context: Context) {
-            context.startActivity(
-                Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, android.net.Uri.parse("package:${context.packageName}"))
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-            )
+            context.startService(Intent(context, HoshiFloatingOverlayService::class.java).apply { action = ACTION_HIDE })
         }
     }
 }

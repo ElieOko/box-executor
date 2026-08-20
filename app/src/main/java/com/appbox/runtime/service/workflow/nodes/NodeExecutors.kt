@@ -12,6 +12,7 @@ import com.appbox.runtime.core.model.WorkflowExecutionContext
 import com.appbox.runtime.core.model.WorkflowNode
 import com.appbox.runtime.core.model.WorkflowNodeType
 import com.appbox.runtime.service.RuntimeContainer
+import com.appbox.runtime.service.agent.PlatformStatusChecker
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -84,7 +85,7 @@ class ParseHnDigestNodeExecutor(
                 context.variables["digest_short"] = digestShort
                 context.variables["digest_original"] = titles.joinToString("\n")
                 context.variables["date"] = SimpleDateFormat("dd/MM/yyyy", Locale.FRANCE).format(Date())
-                context.variables["hn_source"] = "https://news.ycombinator.com/"
+                context.variables["hn_source"] = PlatformStatusChecker.HN_TOP_STORIES_URL
                 context.log("HN digest (${titles.size} titres)")
                 NodeResult.Continue
             }.getOrElse { NodeResult.Fail(it.message ?: "Parse HN error") }
@@ -102,19 +103,51 @@ class ParseHnDigestNodeExecutor(
         val titles = mutableListOf<String>()
         for (i in 0 until minOf(limit, ids.length())) {
             val id = ids.getInt(i)
-            val itemUrl = URL("https://hacker-news.firebaseio.com/v0/item/$id.json")
+            val itemUrl = URL(PlatformStatusChecker.HN_ITEM_URL_TEMPLATE.format(id))
             val conn = itemUrl.openConnection() as HttpURLConnection
             try {
+                conn.connectTimeout = 10_000
+                conn.readTimeout = 10_000
                 val itemBody = conn.inputStream.bufferedReader().readText()
+                if (itemBody.trim() == "null") continue
                 val title = Regex(""""title"\s*:\s*"([^"]+)"""")
                     .find(itemBody)?.groupValues?.get(1) ?: "Story $id"
-                titles += "${i + 1}. $title"
+                val score = Regex(""""score"\s*:\s*(\d+)""")
+                    .find(itemBody)?.groupValues?.get(1)
+                titles += if (score != null) {
+                    "${i + 1}. $title (${score} pts)"
+                } else {
+                    "${i + 1}. $title"
+                }
             } finally {
                 conn.disconnect()
             }
         }
         return titles
     }
+}
+
+class PlatformStatusNodeExecutor : WorkflowNodeExecutor {
+    override val type = WorkflowNodeType.PLATFORM_STATUS_CHECK
+
+    override suspend fun execute(node: WorkflowNode, context: WorkflowExecutionContext): NodeResult =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val report = PlatformStatusChecker.checkAll()
+                context.variables["platform_status"] = PlatformStatusChecker.formatStatusLong(report)
+                context.variables["platform_status_short"] = PlatformStatusChecker.formatStatusShort(report)
+                context.variables["all_platforms_operational"] = report.allOperational.toString()
+                context.variables["system_status_message"] = if (report.allOperational) {
+                    "Tous les systèmes sont opérationnels"
+                } else {
+                    "${report.operationalCount}/${report.results.size} plateformes répondent"
+                }
+                context.log(
+                    "Plateformes: ${report.operationalCount}/${report.results.size} opérationnelles",
+                )
+                NodeResult.Continue
+            }.getOrElse { NodeResult.Fail(it.message ?: "Erreur vérification plateformes") }
+        }
 }
 
 class NotifyNodeExecutor(
@@ -489,19 +522,35 @@ class LaunchAppByNameNodeExecutor(
     override val type = WorkflowNodeType.LAUNCH_APP_BY_NAME
 
     override suspend fun execute(node: WorkflowNode, execContext: WorkflowExecutionContext): NodeResult {
-        val appName = execContext.resolve(
+        val appNameRaw = execContext.resolve(
             node.config["appName"]
                 ?: execContext.variables["app_name"]
                 ?: return NodeResult.Fail("appName requis"),
-        ).lowercase()
-        val inBox = node.config["inBox"]?.toBooleanStrictOrNull() ?: false
-        val apps = container.installedAppScanner.scanLaunchableApps()
-        val match = apps.firstOrNull { it.displayName.lowercase() == appName }
-            ?: apps.firstOrNull { it.displayName.lowercase().contains(appName) }
-            ?: apps.firstOrNull { appName.contains(it.displayName.lowercase()) }
-            ?: return NodeResult.Fail("Application « $appName » introuvable")
+        )
+        val appName = appNameRaw.lowercase()
+        val preferBox = node.config["inBox"]?.toBooleanStrictOrNull() ?: true
 
-        val intent = if (inBox) {
+        val catalogApps = container.appRegistry.getAllApps()
+        val catalogMatch = catalogApps.firstOrNull { it.displayName.lowercase() == appName }
+            ?: catalogApps.firstOrNull { it.displayName.lowercase().contains(appName) }
+            ?: catalogApps.firstOrNull { appName.contains(it.displayName.lowercase()) }
+
+        if (catalogMatch != null) {
+            val intent = AppBoxSessionActivity.createIntent(context, catalogMatch.packageName, catalogMatch.displayName)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.startActivity(intent)
+            execContext.variables["launched_app"] = catalogMatch.packageName
+            execContext.log("AppBox: ${catalogMatch.displayName}")
+            return NodeResult.Continue
+        }
+
+        val systemApps = container.installedAppScanner.scanLaunchableApps()
+        val match = systemApps.firstOrNull { it.displayName.lowercase() == appName }
+            ?: systemApps.firstOrNull { it.displayName.lowercase().contains(appName) }
+            ?: systemApps.firstOrNull { appName.contains(it.displayName.lowercase()) }
+            ?: return NodeResult.Fail("Application « $appNameRaw » introuvable dans AppBox ni le système")
+
+        val intent = if (preferBox) {
             AppBoxSessionActivity.createIntent(context, match.packageName, match.displayName)
         } else {
             container.installedAppScanner.createLaunchIntent(match.packageName)
@@ -569,6 +618,7 @@ fun createNodeExecutors(
     return passThrough + mapOf(
         WorkflowNodeType.HTTP_FETCH to HttpFetchNodeExecutor(),
         WorkflowNodeType.PARSE_HN_DIGEST to ParseHnDigestNodeExecutor(container),
+        WorkflowNodeType.PLATFORM_STATUS_CHECK to PlatformStatusNodeExecutor(),
         WorkflowNodeType.NOTIFY to NotifyNodeExecutor(container),
         WorkflowNodeType.LAUNCH_APP to LaunchAppNodeExecutor(context),
         WorkflowNodeType.LAUNCH_APP_BY_NAME to LaunchAppByNameNodeExecutor(context, container),
