@@ -1,6 +1,7 @@
 package com.appbox.runtime.service.agent
 
 import com.appbox.runtime.core.instruction.VoiceCommandMapping
+import com.appbox.runtime.core.model.ConversationTurn
 import com.appbox.runtime.core.model.HoshiUserConfig
 import com.appbox.runtime.core.model.OpenAiIntentResult
 import com.appbox.runtime.core.model.WorkflowDefinition
@@ -24,14 +25,21 @@ class OpenAiIntentRouter(
         config: HoshiUserConfig,
         workflows: List<WorkflowDefinition>,
         voiceCommands: List<VoiceCommandMapping>,
+        memoryContext: String = "",
+        recentTurns: List<ConversationTurn> = emptyList(),
+        contactGroupsContext: String = "",
+        installedAppsContext: String = "",
     ): Result<OpenAiIntentResult> = withContext(Dispatchers.IO) {
         val apiKey = config.openAiApiKey.trim()
         if (apiKey.isBlank() || !config.openAiEnabled) {
             return@withContext Result.failure(IllegalStateException("OpenAI non configuré"))
         }
         runCatching {
-            val body = buildRequestBody(userText, config, workflows, voiceCommands)
-            val responseText = postChatCompletion(apiKey, config.openAiModel, body)
+            val body = buildRequestBody(
+                userText, config, workflows, voiceCommands, memoryContext, recentTurns,
+                contactGroupsContext, installedAppsContext,
+            )
+            val responseText = postChatCompletion(apiKey, body)
             parseIntentResponse(responseText)
         }
     }
@@ -41,16 +49,30 @@ class OpenAiIntentRouter(
         config: HoshiUserConfig,
         workflows: List<WorkflowDefinition>,
         voiceCommands: List<VoiceCommandMapping>,
+        memoryContext: String,
+        recentTurns: List<ConversationTurn>,
+        contactGroupsContext: String,
+        installedAppsContext: String,
     ): String {
-        val time = SimpleDateFormat("HH:mm", Locale.FRANCE).format(Date())
+        val time = SimpleDateFormat("EEEE dd/MM/yyyy HH:mm", Locale.FRANCE).format(Date())
         val workflowList = workflows.joinToString("\n") { wf ->
             "- ${wf.id}: ${wf.name} — ${wf.description}"
         }
         val commandList = voiceCommands.joinToString("\n") { cmd ->
             "- \"${cmd.phrase}\" → ${cmd.workflowId}"
         }
+        val persona = JarvisPersona.systemPromptPrefix(config)
+        val techExpertise = if (config.techExpertMode) """
+            Expertise technique (niveau architecte senior):
+            Programmation, architecture logicielle, cloud native, Kubernetes, DevOps, CI/CD.
+            Pour questions tech: action=speak avec réponse précise et structurée.
+        """.trimIndent() else ""
+        val maxTokens = if (config.techExpertMode && looksLikeTechQuestion(userText)) 700 else 450
+
         val systemPrompt = """
-            Tu es HOSHI, agent vocal français sur Android. Analyse la demande utilisateur et réponds UNIQUEMENT en JSON valide.
+            $persona
+            $techExpertise
+            Analyse la demande et réponds UNIQUEMENT en JSON valide.
 
             Workflows disponibles:
             $workflowList
@@ -58,35 +80,43 @@ class OpenAiIntentRouter(
             Exemples de commandes:
             $commandList
 
-            Config utilisateur:
-            - WhatsApp: ${config.whatsappPhone}, message par défaut: ${config.whatsappMessage}
-            - Heure WhatsApp planifiée: ${config.whatsappHour}:${"%02d".format(config.whatsappMinute)}
-            - Heure actuelle: $time
+            Applications installées:
+            $installedAppsContext
 
-            Réponds avec ce schéma JSON strict:
-            {
-              "action": "workflow" | "speak" | "unknown",
-              "workflow_id": "id_du_workflow ou null",
-              "parameters": { "cle": "valeur" },
-              "speak": "réponse courte en français pour TTS"
-            }
+            Groupes contacts WhatsApp:
+            $contactGroupsContext
+
+            Config:
+            - WhatsApp: ${config.whatsappPhone}, message: ${config.whatsappMessage}
+            - Heure WhatsApp: ${config.whatsappHour}:${"%02d".format(config.whatsappMinute)}
+            - Briefing: ${config.morningBriefingHour}:${"%02d".format(config.morningBriefingMinute)}
+            - Groupe défaut: ${config.defaultContactGroupId.ifBlank { "aucun" }}
+            - Maintenant: $time
+
+            ${if (memoryContext.isNotBlank()) "Mémoire:\n$memoryContext" else ""}
+
+            Schéma JSON:
+            { "action": "workflow"|"speak"|"remember"|"unknown", "workflow_id": "...", "parameters": {}, "speak": "..." }
 
             Règles:
-            - action=workflow si une automatisation doit s'exécuter (workflow_id obligatoire)
-            - action=speak pour salutations, questions simples, clarifications (pas de workflow)
-            - action=unknown si tu ne peux pas aider
-            - parameters peut inclure phone, message, immediate=true pour WhatsApp immédiat
-            - speak doit être naturel, concis, en français
+            - whatsapp_group_broadcast: params contact_group_id, message_hint
+            - launch_app_by_name: params app_name (Instagram, Chrome, etc.)
+            - open_system_app: params app_target (settings, wifi)
+            - speak: conversation et questions tech détaillées
+            - remember: fact_key, fact_value
         """.trimIndent()
 
-        val messages = JSONArray()
-            .put(JSONObject().put("role", "system").put("content", systemPrompt))
-            .put(JSONObject().put("role", "user").put("content", userText))
+        val messages = JSONArray().put(JSONObject().put("role", "system").put("content", systemPrompt))
+        recentTurns.forEach { turn ->
+            val role = if (turn.role == "assistant") "assistant" else "user"
+            messages.put(JSONObject().put("role", role).put("content", turn.text))
+        }
+        messages.put(JSONObject().put("role", "user").put("content", userText))
 
         return JSONObject()
             .put("model", config.openAiModel.ifBlank { "gpt-4o-mini" })
-            .put("temperature", 0.2)
-            .put("max_tokens", 350)
+            .put("temperature", if (config.jarvisMode) 0.35 else 0.2)
+            .put("max_tokens", maxTokens)
             .put("response_format", JSONObject().put("type", "json_object"))
             .put("messages", messages)
             .toString()
@@ -110,7 +140,7 @@ class OpenAiIntentRouter(
             .getString("content")
     }
 
-    private fun postChatCompletion(apiKey: String, model: String, body: String): String {
+    private fun postChatCompletion(apiKey: String, body: String): String {
         val connection = URL("https://api.openai.com/v1/chat/completions").openConnection() as HttpURLConnection
         try {
             connection.requestMethod = "POST"
@@ -134,5 +164,15 @@ class OpenAiIntentRouter(
         } finally {
             connection.disconnect()
         }
+    }
+
+    private fun looksLikeTechQuestion(text: String): Boolean {
+        val keywords = listOf(
+            "kubernetes", "k8s", "docker", "cloud", "programm", "code", "architecture",
+            "microservice", "api", "kotlin", "java", "python", "terraform", "helm",
+            "devops", "gitops", "cluster", "pod", "deploy",
+        )
+        val lower = text.lowercase()
+        return keywords.any { lower.contains(it) }
     }
 }

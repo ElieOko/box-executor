@@ -55,7 +55,9 @@ class HttpFetchNodeExecutor : WorkflowNodeExecutor {
         }
 }
 
-class ParseHnDigestNodeExecutor : WorkflowNodeExecutor {
+class ParseHnDigestNodeExecutor(
+    private val container: RuntimeContainer,
+) : WorkflowNodeExecutor {
     override val type = WorkflowNodeType.PARSE_HN_DIGEST
 
     override suspend fun execute(node: WorkflowNode, context: WorkflowExecutionContext): NodeResult =
@@ -68,12 +70,22 @@ class ParseHnDigestNodeExecutor : WorkflowNodeExecutor {
                 } else {
                     parseHnApi(body, limit)
                 }
-                val digest = titles.joinToString("\n")
+                var digest = titles.joinToString("\n")
+                var digestShort = titles.take(2).joinToString(". ")
+                val config = container.hoshiPreferences.getConfig()
+                if (config.translateNewsToFrench && config.openAiApiKey.isNotBlank()) {
+                    container.openAiClient.translateToFrench(digest, config).getOrNull()?.let { translated ->
+                        digest = translated
+                        digestShort = translated.lineSequence().take(2).joinToString(". ")
+                        context.log("Digest traduit EN→FR")
+                    }
+                }
                 context.variables["digest"] = digest
-                context.variables["digest_short"] = titles.take(2).joinToString(". ")
+                context.variables["digest_short"] = digestShort
+                context.variables["digest_original"] = titles.joinToString("\n")
                 context.variables["date"] = SimpleDateFormat("dd/MM/yyyy", Locale.FRANCE).format(Date())
                 context.variables["hn_source"] = "https://news.ycombinator.com/"
-                context.log("HN digest (${titles.size} titres) depuis news.ycombinator.com")
+                context.log("HN digest (${titles.size} titres)")
                 NodeResult.Continue
             }.getOrElse { NodeResult.Fail(it.message ?: "Parse HN error") }
         }
@@ -296,6 +308,244 @@ class PublishEventNodeExecutor(
     }
 }
 
+class UiReadScreenNodeExecutor : WorkflowNodeExecutor {
+    override val type = WorkflowNodeType.UI_READ_SCREEN
+
+    override suspend fun execute(node: WorkflowNode, context: WorkflowExecutionContext): NodeResult {
+        val maxChars = node.config["maxChars"]?.toIntOrNull() ?: 2500
+        return com.appbox.runtime.accessibility.HoshiAccessibilityService.readActiveScreenText(maxChars)
+            .fold(
+                onSuccess = { text ->
+                    context.variables["screen_text"] = text
+                    context.variables["screen_preview"] = text.lineSequence().take(3).joinToString(". ")
+                    context.log("Écran lu (${text.length} car.)")
+                    NodeResult.Continue
+                },
+                onFailure = { NodeResult.Fail(it.message ?: "Lecture écran échouée") },
+            )
+    }
+}
+
+class UiTapTextNodeExecutor : WorkflowNodeExecutor {
+    override val type = WorkflowNodeType.UI_TAP_TEXT
+
+    override suspend fun execute(node: WorkflowNode, context: WorkflowExecutionContext): NodeResult {
+        val text = context.resolve(node.config["text"] ?: return NodeResult.Fail("text requis"))
+        val partial = node.config["partial"]?.toBooleanStrictOrNull() ?: true
+        return com.appbox.runtime.accessibility.HoshiAccessibilityService.tapByText(text, partial)
+            .fold(
+                onSuccess = {
+                    context.log("Tap UI: $text")
+                    NodeResult.Continue
+                },
+                onFailure = { NodeResult.Fail(it.message ?: "Tap échoué") },
+            )
+    }
+}
+
+class UiGlobalActionNodeExecutor : WorkflowNodeExecutor {
+    override val type = WorkflowNodeType.UI_GLOBAL_ACTION
+
+    override suspend fun execute(node: WorkflowNode, context: WorkflowExecutionContext): NodeResult {
+        val action = node.config["action"] ?: "home"
+        return com.appbox.runtime.accessibility.HoshiAccessibilityService.performGlobalAction(action)
+            .fold(
+                onSuccess = {
+                    context.log("Action globale: $action")
+                    NodeResult.Continue
+                },
+                onFailure = { NodeResult.Fail(it.message ?: "Action globale échouée") },
+            )
+    }
+}
+
+class MemoryWriteNodeExecutor(
+    private val container: RuntimeContainer,
+) : WorkflowNodeExecutor {
+    override val type = WorkflowNodeType.MEMORY_WRITE
+
+    override suspend fun execute(node: WorkflowNode, context: WorkflowExecutionContext): NodeResult {
+        val key = context.resolve(node.config["key"] ?: return NodeResult.Fail("key requis"))
+        val value = context.resolve(node.config["value"] ?: return NodeResult.Fail("value requis"))
+        container.hoshiMemory.rememberFact(key, value)
+        context.variables["memory_key"] = key
+        context.variables["memory_value"] = value
+        context.log("Mémoire: $key = $value")
+        return NodeResult.Continue
+    }
+}
+
+class MemoryReadNodeExecutor(
+    private val container: RuntimeContainer,
+) : WorkflowNodeExecutor {
+    override val type = WorkflowNodeType.MEMORY_READ
+
+    override suspend fun execute(node: WorkflowNode, context: WorkflowExecutionContext): NodeResult {
+        val key = context.resolve(node.config["key"] ?: "")
+        val facts = container.hoshiMemory.getFacts()
+        if (key.isNotBlank()) {
+            val fact = facts[key.lowercase()]
+            context.variables["memory_value"] = fact?.value ?: ""
+            context.log("Mémoire lue: $key")
+        } else {
+            context.variables["memory_all"] = facts.values.joinToString("; ") { "${it.key}=${it.value}" }
+            context.log("Mémoire complète (${facts.size} faits)")
+        }
+        return NodeResult.Continue
+    }
+}
+
+class TranslateTextNodeExecutor(
+    private val container: RuntimeContainer,
+) : WorkflowNodeExecutor {
+    override val type = WorkflowNodeType.TRANSLATE_TEXT
+
+    override suspend fun execute(node: WorkflowNode, context: WorkflowExecutionContext): NodeResult =
+        withContext(Dispatchers.IO) {
+            val sourceKey = node.config["sourceVariable"] ?: "digest"
+            val targetKey = node.config["targetVariable"] ?: sourceKey
+            val source = context.variables[sourceKey] ?: return@withContext NodeResult.Fail("Variable $sourceKey vide")
+            val config = container.hoshiPreferences.getConfig()
+            if (!config.translateNewsToFrench || config.openAiApiKey.isBlank()) {
+                context.variables[targetKey] = source
+                return@withContext NodeResult.Continue
+            }
+            container.openAiClient.translateToFrench(source, config).fold(
+                onSuccess = {
+                    context.variables[targetKey] = it
+                    if (targetKey == "digest") context.variables["digest_short"] = it.lineSequence().take(2).joinToString(". ")
+                    context.log("Traduction EN→FR ($targetKey)")
+                    NodeResult.Continue
+                },
+                onFailure = { NodeResult.Fail(it.message ?: "Traduction échouée") },
+            )
+        }
+}
+
+class WhatsAppBroadcastNodeExecutor(
+    private val context: Context,
+    private val container: RuntimeContainer,
+) : WorkflowNodeExecutor {
+    override val type = WorkflowNodeType.WHATSAPP_BROADCAST
+
+    override suspend fun execute(node: WorkflowNode, execContext: WorkflowExecutionContext): NodeResult =
+        withContext(Dispatchers.IO) {
+            val groupId = execContext.variables["contact_group_id"]
+                ?: node.config["groupId"]
+                ?: container.hoshiPreferences.getConfig().defaultContactGroupId
+            if (groupId.isBlank()) return@withContext NodeResult.Fail("Groupe de contacts requis")
+
+            val group = container.contactGroups.getGroup(groupId)
+                ?: return@withContext NodeResult.Fail("Groupe introuvable: $groupId")
+            if (group.contacts.isEmpty()) return@withContext NodeResult.Fail("Groupe vide: ${group.name}")
+
+            val config = container.hoshiPreferences.getConfig()
+            val userHint = execContext.variables["message_hint"] ?: execContext.variables["whatsapp_message"] ?: ""
+            val template = execContext.variables["message_template"]
+                ?: group.messageTemplate
+                .ifBlank { config.whatsappMessage }
+            val delayMs = node.config["delayBetweenMs"]?.toLongOrNull() ?: 3500L
+            var sent = 0
+
+            for (contact in group.contacts) {
+                val message = container.openAiClient.personalizeMessage(
+                    template = template,
+                    contactName = contact.name,
+                    groupName = group.name,
+                    config = config,
+                    userHint = userHint,
+                ).getOrElse {
+                    template.replace("{{name}}", contact.name).replace("{{group}}", group.name)
+                }
+                val phone = contact.phone.replace("+", "").replace(" ", "")
+                val encoded = URLEncoder.encode(message, "UTF-8")
+                val uri = Uri.parse("https://wa.me/$phone?text=$encoded")
+                val intent = Intent(Intent.ACTION_VIEW, uri).apply {
+                    setPackage("com.whatsapp")
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                if (intent.resolveActivity(context.packageManager) == null) {
+                    context.startActivity(Intent(Intent.ACTION_VIEW, uri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                } else {
+                    context.startActivity(intent)
+                }
+                delay(2500)
+                com.appbox.runtime.accessibility.HoshiAccessibilityService.sendWhatsAppMessage()
+                    .onSuccess { sent++ }
+                    .onFailure { execContext.log("Échec envoi ${contact.name}") }
+                delay(delayMs)
+            }
+            execContext.variables["broadcast_sent"] = sent.toString()
+            execContext.variables["broadcast_total"] = group.contacts.size.toString()
+            execContext.log("Broadcast ${group.name}: $sent/${group.contacts.size}")
+            NodeResult.Continue
+        }
+}
+
+class LaunchAppByNameNodeExecutor(
+    private val context: Context,
+    private val container: RuntimeContainer,
+) : WorkflowNodeExecutor {
+    override val type = WorkflowNodeType.LAUNCH_APP_BY_NAME
+
+    override suspend fun execute(node: WorkflowNode, execContext: WorkflowExecutionContext): NodeResult {
+        val appName = execContext.resolve(
+            node.config["appName"]
+                ?: execContext.variables["app_name"]
+                ?: return NodeResult.Fail("appName requis"),
+        ).lowercase()
+        val inBox = node.config["inBox"]?.toBooleanStrictOrNull() ?: false
+        val apps = container.installedAppScanner.scanLaunchableApps()
+        val match = apps.firstOrNull { it.displayName.lowercase() == appName }
+            ?: apps.firstOrNull { it.displayName.lowercase().contains(appName) }
+            ?: apps.firstOrNull { appName.contains(it.displayName.lowercase()) }
+            ?: return NodeResult.Fail("Application « $appName » introuvable")
+
+        val intent = if (inBox) {
+            AppBoxSessionActivity.createIntent(context, match.packageName, match.displayName)
+        } else {
+            container.installedAppScanner.createLaunchIntent(match.packageName)
+                ?: return NodeResult.Fail("Impossible d'ouvrir ${match.displayName}")
+        }
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        context.startActivity(intent)
+        execContext.variables["launched_app"] = match.packageName
+        execContext.log("App ouverte: ${match.displayName}")
+        return NodeResult.Continue
+    }
+}
+
+class OpenSystemAppNodeExecutor(
+    private val context: Context,
+) : WorkflowNodeExecutor {
+    override val type = WorkflowNodeType.OPEN_SYSTEM_APP
+
+    override suspend fun execute(node: WorkflowNode, execContext: WorkflowExecutionContext): NodeResult {
+        val target = execContext.resolve(node.config["target"] ?: execContext.variables["app_target"] ?: "settings")
+        val intent = when (target.lowercase()) {
+            "settings", "parametres", "paramètres" ->
+                Intent(android.provider.Settings.ACTION_SETTINGS)
+            "wifi" ->
+                Intent(android.provider.Settings.ACTION_WIFI_SETTINGS)
+            "bluetooth" ->
+                Intent(android.provider.Settings.ACTION_BLUETOOTH_SETTINGS)
+            "accessibility", "accessibilite" ->
+                Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS)
+            "apps", "applications" ->
+                Intent(android.provider.Settings.ACTION_APPLICATION_SETTINGS)
+            else -> {
+                val pm = context.packageManager
+                pm.getLaunchIntentForPackage(target)
+                    ?: return NodeResult.Fail("Cible système inconnue: $target")
+            }
+        }
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        context.startActivity(intent)
+        execContext.log("Système ouvert: $target")
+        return NodeResult.Continue
+    }
+}
+
 /** Passe-through pour nœuds trigger (déjà activés par le moteur) */
 class PassThroughNodeExecutor(override val type: WorkflowNodeType) : WorkflowNodeExecutor {
     override suspend fun execute(node: WorkflowNode, context: WorkflowExecutionContext): NodeResult {
@@ -318,16 +568,25 @@ fun createNodeExecutors(
 
     return passThrough + mapOf(
         WorkflowNodeType.HTTP_FETCH to HttpFetchNodeExecutor(),
-        WorkflowNodeType.PARSE_HN_DIGEST to ParseHnDigestNodeExecutor(),
+        WorkflowNodeType.PARSE_HN_DIGEST to ParseHnDigestNodeExecutor(container),
         WorkflowNodeType.NOTIFY to NotifyNodeExecutor(container),
         WorkflowNodeType.LAUNCH_APP to LaunchAppNodeExecutor(context),
+        WorkflowNodeType.LAUNCH_APP_BY_NAME to LaunchAppByNameNodeExecutor(context, container),
+        WorkflowNodeType.OPEN_SYSTEM_APP to OpenSystemAppNodeExecutor(context),
         WorkflowNodeType.WHATSAPP_PREPARE to WhatsAppPrepareNodeExecutor(),
         WorkflowNodeType.WHATSAPP_OPEN to WhatsAppOpenNodeExecutor(context),
         WorkflowNodeType.WHATSAPP_SEND_ACCESSIBILITY to WhatsAppSendAccessibilityNodeExecutor(),
+        WorkflowNodeType.WHATSAPP_BROADCAST to WhatsAppBroadcastNodeExecutor(context, container),
+        WorkflowNodeType.TRANSLATE_TEXT to TranslateTextNodeExecutor(container),
         WorkflowNodeType.DELAY to DelayNodeExecutor(),
         WorkflowNodeType.CONDITION to ConditionNodeExecutor(),
         WorkflowNodeType.STORE to StoreNodeExecutor(container),
         WorkflowNodeType.SPEAK to SpeakNodeExecutor(onSpeak),
         WorkflowNodeType.PUBLISH_EVENT to PublishEventNodeExecutor(container),
+        WorkflowNodeType.UI_READ_SCREEN to UiReadScreenNodeExecutor(),
+        WorkflowNodeType.UI_TAP_TEXT to UiTapTextNodeExecutor(),
+        WorkflowNodeType.UI_GLOBAL_ACTION to UiGlobalActionNodeExecutor(),
+        WorkflowNodeType.MEMORY_WRITE to MemoryWriteNodeExecutor(container),
+        WorkflowNodeType.MEMORY_READ to MemoryReadNodeExecutor(container),
     )
 }

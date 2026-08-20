@@ -28,13 +28,93 @@ fun HoshiConfigPanel(
     config: HoshiUserConfig,
     openAiKeyConfigured: Boolean,
     accessibilityEnabled: Boolean,
+    contactGroups: List<com.appbox.runtime.core.model.HoshiContactGroup>,
+    onContactGroupsChange: (List<com.appbox.runtime.core.model.HoshiContactGroup>) -> Unit,
     onConfigChange: (HoshiUserConfig) -> Unit,
     onSave: () -> Unit,
     onOpenAccessibility: () -> Unit,
 ) {
     AppBoxPanel(cornerRadius = 14.dp, modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Intelligence OpenAI", color = AppBoxThemeColors.TextPrimary, fontSize = 14.sp)
+            Text("Mode JARVIS", color = AppBoxThemeColors.Accent, fontSize = 14.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("Personnalité JARVIS", color = AppBoxThemeColors.TextSecondary, fontSize = 12.sp)
+                Switch(
+                    checked = config.jarvisMode,
+                    onCheckedChange = { onConfigChange(config.copy(jarvisMode = it)) },
+                )
+            }
+
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = config.userTitle,
+                    onValueChange = { onConfigChange(config.copy(userTitle = it)) },
+                    label = { Text("Titre") },
+                    modifier = Modifier.weight(1f),
+                    singleLine = true,
+                )
+                OutlinedTextField(
+                    value = config.userName,
+                    onValueChange = { onConfigChange(config.copy(userName = it)) },
+                    label = { Text("Prénom") },
+                    modifier = Modifier.weight(1f),
+                    singleLine = true,
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("Mémoire conversation", color = AppBoxThemeColors.TextSecondary, fontSize = 12.sp)
+                Switch(
+                    checked = config.memoryEnabled,
+                    onCheckedChange = { onConfigChange(config.copy(memoryEnabled = it)) },
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("Proactivité (briefing matinal)", color = AppBoxThemeColors.TextSecondary, fontSize = 12.sp)
+                Switch(
+                    checked = config.proactiveEnabled,
+                    onCheckedChange = { onConfigChange(config.copy(proactiveEnabled = it)) },
+                )
+            }
+
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = config.morningBriefingHour.toString(),
+                    onValueChange = { v ->
+                        v.toIntOrNull()?.coerceIn(0, 23)?.let { onConfigChange(config.copy(morningBriefingHour = it)) }
+                    },
+                    label = { Text("Briefing h") },
+                    modifier = Modifier.weight(1f),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    singleLine = true,
+                )
+                OutlinedTextField(
+                    value = config.morningBriefingMinute.toString(),
+                    onValueChange = { v ->
+                        v.toIntOrNull()?.coerceIn(0, 59)?.let { onConfigChange(config.copy(morningBriefingMinute = it)) }
+                    },
+                    label = { Text("Briefing min") },
+                    modifier = Modifier.weight(1f),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    singleLine = true,
+                )
+            }
+
+            Text("Intelligence OpenAI", color = AppBoxThemeColors.TextPrimary, fontSize = 14.sp, modifier = Modifier.padding(top = 8.dp))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -159,6 +239,90 @@ fun HoshiConfigPanel(
                     label = { Text("Min HN") },
                     modifier = Modifier.weight(1f),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    singleLine = true,
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("Traduction news EN→FR", color = AppBoxThemeColors.TextSecondary, fontSize = 12.sp)
+                Switch(checked = config.translateNewsToFrench, onCheckedChange = { onConfigChange(config.copy(translateNewsToFrench = it)) })
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("Expert tech (K8s, cloud, code)", color = AppBoxThemeColors.TextSecondary, fontSize = 12.sp)
+                Switch(checked = config.techExpertMode, onCheckedChange = { onConfigChange(config.copy(techExpertMode = it)) })
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("Messages WhatsApp personnalisés IA", color = AppBoxThemeColors.TextSecondary, fontSize = 12.sp)
+                Switch(checked = config.whatsappPersonalizeWithAi, onCheckedChange = { onConfigChange(config.copy(whatsappPersonalizeWithAi = it)) })
+            }
+
+            ContactGroupsEditor(
+                groups = contactGroups,
+                defaultGroupId = config.defaultContactGroupId,
+                onDefaultGroupChange = { onConfigChange(config.copy(defaultContactGroupId = it)) },
+                onGroupsChange = onContactGroupsChange,
+            )
+
+            Text("Voix HOSHI", color = AppBoxThemeColors.TextPrimary, fontSize = 14.sp, modifier = Modifier.padding(top = 8.dp))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = String.format("%.2f", config.ttsSpeechRate),
+                    onValueChange = { v -> v.toFloatOrNull()?.coerceIn(0.5f, 1.5f)?.let { onConfigChange(config.copy(ttsSpeechRate = it)) } },
+                    label = { Text("Vitesse") },
+                    modifier = Modifier.weight(1f),
+                    singleLine = true,
+                )
+                OutlinedTextField(
+                    value = String.format("%.2f", config.ttsPitch),
+                    onValueChange = { v -> v.toFloatOrNull()?.coerceIn(0.5f, 1.5f)?.let { onConfigChange(config.copy(ttsPitch = it)) } },
+                    label = { Text("Ton") },
+                    modifier = Modifier.weight(1f),
+                    singleLine = true,
+                )
+            }
+            OutlinedTextField(
+                value = config.ttsVoiceName,
+                onValueChange = { onConfigChange(config.copy(ttsVoiceName = it)) },
+                label = { Text("Voix TTS (nom partiel, ex: fr-fr-x-fra-network)") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+            )
+
+            Text("Microphone", color = AppBoxThemeColors.TextPrimary, fontSize = 14.sp, modifier = Modifier.padding(top = 8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("Filtre anti-bruit", color = AppBoxThemeColors.TextSecondary, fontSize = 12.sp)
+                Switch(checked = config.sttNoiseFilterEnabled, onCheckedChange = { onConfigChange(config.copy(sttNoiseFilterEnabled = it)) })
+            }
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = config.sttSilenceMs.toString(),
+                    onValueChange = { v -> v.toLongOrNull()?.coerceIn(1200, 5000)?.let { onConfigChange(config.copy(sttSilenceMs = it)) } },
+                    label = { Text("Silence (ms)") },
+                    modifier = Modifier.weight(1f),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    singleLine = true,
+                )
+                OutlinedTextField(
+                    value = String.format("%.2f", config.sttMinConfidence),
+                    onValueChange = { v -> v.toFloatOrNull()?.coerceIn(0.1f, 0.95f)?.let { onConfigChange(config.copy(sttMinConfidence = it)) } },
+                    label = { Text("Confiance min") },
+                    modifier = Modifier.weight(1f),
                     singleLine = true,
                 )
             }

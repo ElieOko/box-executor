@@ -70,6 +70,8 @@ data class RuntimeUiState(
     val workflowEditMode: Boolean = false,
     val accessibilityEnabled: Boolean = false,
     val openAiKeyConfigured: Boolean = false,
+    val conversationTurns: List<com.appbox.runtime.core.model.ConversationTurn> = emptyList(),
+    val contactGroups: List<com.appbox.runtime.core.model.HoshiContactGroup> = emptyList(),
 )
 
 class RuntimeViewModel(
@@ -346,6 +348,24 @@ class RuntimeViewModel(
                         openAiKeyConfigured = config.openAiApiKey.isNotBlank(),
                     )
                 }
+                (container.voiceService as? com.appbox.runtime.service.voice.VoiceService)?.applyVoiceProfile(config)
+            }
+        }
+        viewModelScope.launch {
+            container.automationAgent.conversationFlow().collect { turns ->
+                _uiState.update { it.copy(conversationTurns = turns) }
+            }
+        }
+        viewModelScope.launch {
+            container.contactGroups.groupsFlow.collect { groups ->
+                _uiState.update { state ->
+                    state.copy(
+                        contactGroups = groups,
+                        hoshiConfig = if (state.hoshiConfig.defaultContactGroupId.isBlank() && groups.isNotEmpty()) {
+                            state.hoshiConfig.copy(defaultContactGroupId = groups.first().id)
+                        } else state.hoshiConfig,
+                    )
+                }
             }
         }
         viewModelScope.launch {
@@ -361,6 +381,10 @@ class RuntimeViewModel(
         _uiState.update { it.copy(hoshiConfig = config) }
     }
 
+    fun updateContactGroups(groups: List<com.appbox.runtime.core.model.HoshiContactGroup>) {
+        _uiState.update { it.copy(contactGroups = groups) }
+    }
+
     fun saveHoshiConfig() {
         viewModelScope.launch {
             val uiConfig = _uiState.value.hoshiConfig
@@ -370,8 +394,10 @@ class RuntimeViewModel(
             } else {
                 uiConfig
             }
+            container.contactGroups.saveGroups(_uiState.value.contactGroups)
             container.automationAgent.saveUserConfig(config)
                 .onSuccess {
+                    (container.voiceService as? com.appbox.runtime.service.voice.VoiceService)?.applyVoiceProfile(config)
                     container.voiceService.startContinuousListening()
                     refreshAgentData()
                     _uiState.update {

@@ -2,7 +2,7 @@
   "version": 2,
   "agent": {
     "name": "HOSHI",
-    "description": "Agent vocal réactif — WhatsApp planifié, digest Hacker News, automatisation UI",
+    "description": "Assistant JARVIS — voix, mémoire, proactivité, contrôle UI",
     "workflows": [
       {
         "id": "whatsapp_scheduled_send",
@@ -162,6 +162,175 @@
           { "id": "e1", "fromNodeId": "t1", "toNodeId": "n1" },
           { "id": "e2", "fromNodeId": "n1", "toNodeId": "n2" }
         ]
+      },
+      {
+        "id": "jarvis_morning_briefing",
+        "name": "Briefing matinal JARVIS",
+        "description": "Briefing proactif — actualités et statut",
+        "enabled": true,
+        "nodes": [
+          {
+            "id": "t1",
+            "type": "TRIGGER_SCHEDULE",
+            "label": "Matin",
+            "config": { "scheduleId": "jarvis_morning" },
+            "positionX": 60,
+            "positionY": 700
+          },
+          {
+            "id": "n1",
+            "type": "HTTP_FETCH",
+            "label": "Actualités",
+            "config": { "url": "https://news.ycombinator.com/", "method": "GET" },
+            "positionX": 280,
+            "positionY": 700
+          },
+          {
+            "id": "n2",
+            "type": "PARSE_HN_DIGEST",
+            "label": "Digest",
+            "config": { "limit": "3" },
+            "positionX": 500,
+            "positionY": 700
+          },
+          {
+            "id": "n3",
+            "type": "NOTIFY",
+            "label": "Notification briefing",
+            "config": {
+              "title": "Briefing HOSHI",
+              "body": "{{digest_short}}"
+            },
+            "positionX": 720,
+            "positionY": 700
+          },
+          {
+            "id": "n4",
+            "type": "SPEAK",
+            "label": "Briefing vocal",
+            "config": {
+              "text": "Bonjour {{user_title}}. Voici votre briefing. {{digest_short}}"
+            },
+            "positionX": 940,
+            "positionY": 700
+          }
+        ],
+        "edges": [
+          { "id": "e1", "fromNodeId": "t1", "toNodeId": "n1" },
+          { "id": "e2", "fromNodeId": "n1", "toNodeId": "n2" },
+          { "id": "e3", "fromNodeId": "n2", "toNodeId": "n3" },
+          { "id": "e4", "fromNodeId": "n3", "toNodeId": "n4" }
+        ]
+      },
+      {
+        "id": "jarvis_read_screen",
+        "name": "Lire l'écran",
+        "description": "Lit le contenu visible via Accessibilité",
+        "enabled": true,
+        "nodes": [
+          {
+            "id": "t1",
+            "type": "TRIGGER_VOICE",
+            "label": "Commande",
+            "config": {},
+            "positionX": 60,
+            "positionY": 900
+          },
+          {
+            "id": "n1",
+            "type": "UI_READ_SCREEN",
+            "label": "Lecture écran",
+            "config": { "maxChars": "2000" },
+            "positionX": 280,
+            "positionY": 900
+          },
+          {
+            "id": "n2",
+            "type": "SPEAK",
+            "label": "Analyse vocale",
+            "config": {
+              "text": "{{user_title}}, voici ce que je vois. {{screen_preview}}"
+            },
+            "positionX": 500,
+            "positionY": 900
+          }
+        ],
+        "edges": [
+          { "id": "e1", "fromNodeId": "t1", "toNodeId": "n1" },
+          { "id": "e2", "fromNodeId": "n1", "toNodeId": "n2" }
+        ]
+      },
+      {
+        "id": "whatsapp_group_broadcast",
+        "name": "WhatsApp groupe personnalisé",
+        "description": "Envoie un message personnalisé à chaque contact du groupe",
+        "enabled": true,
+        "nodes": [
+          {
+            "id": "t1",
+            "type": "TRIGGER_VOICE",
+            "label": "Commande groupe",
+            "config": {},
+            "positionX": 60,
+            "positionY": 1100
+          },
+          {
+            "id": "n1",
+            "type": "WHATSAPP_BROADCAST",
+            "label": "Broadcast IA",
+            "config": { "delayBetweenMs": "4000" },
+            "positionX": 300,
+            "positionY": 1100
+          },
+          {
+            "id": "n2",
+            "type": "SPEAK",
+            "label": "Confirmation",
+            "config": { "text": "{{user_title}}, messages envoyés à {{broadcast_sent}} contacts sur {{broadcast_total}}." },
+            "positionX": 560,
+            "positionY": 1100
+          }
+        ],
+        "edges": [
+          { "id": "e1", "fromNodeId": "t1", "toNodeId": "n1" },
+          { "id": "e2", "fromNodeId": "n1", "toNodeId": "n2" }
+        ]
+      },
+      {
+        "id": "launch_any_app",
+        "name": "Ouvrir une application",
+        "description": "Lance n'importe quelle app installée par son nom",
+        "enabled": true,
+        "nodes": [
+          {
+            "id": "t1",
+            "type": "TRIGGER_VOICE",
+            "label": "Commande app",
+            "config": {},
+            "positionX": 60,
+            "positionY": 1300
+          },
+          {
+            "id": "n1",
+            "type": "LAUNCH_APP_BY_NAME",
+            "label": "Ouvrir app",
+            "config": { "inBox": "false" },
+            "positionX": 300,
+            "positionY": 1300
+          },
+          {
+            "id": "n2",
+            "type": "SPEAK",
+            "label": "Confirmé",
+            "config": { "text": "Application ouverte, {{user_title}}." },
+            "positionX": 560,
+            "positionY": 1300
+          }
+        ],
+        "edges": [
+          { "id": "e1", "fromNodeId": "t1", "toNodeId": "n1" },
+          { "id": "e2", "fromNodeId": "n1", "toNodeId": "n2" }
+        ]
       }
     ],
     "schedules": [],
@@ -170,12 +339,19 @@
       { "phrase": "envoyer whatsapp", "workflowId": "whatsapp_scheduled_send" },
       { "phrase": "digest hacker news", "workflowId": "hn_daily_digest" },
       { "phrase": "actualités", "workflowId": "hn_daily_digest" },
-      { "phrase": "ouvrir yvent", "workflowId": "voice_launch_yvent" }
+      { "phrase": "ouvrir yvent", "workflowId": "voice_launch_yvent" },
+      { "phrase": "lis l'écran", "workflowId": "jarvis_read_screen" },
+      { "phrase": "que vois-tu", "workflowId": "jarvis_read_screen" },
+      { "phrase": "briefing", "workflowId": "jarvis_morning_briefing" },
+      { "phrase": "envoie au groupe", "workflowId": "whatsapp_group_broadcast" },
+      { "phrase": "message au groupe", "workflowId": "whatsapp_group_broadcast" },
+      { "phrase": "ouvre", "workflowId": "launch_any_app" },
+      { "phrase": "ouvrir", "workflowId": "launch_any_app" }
     ],
     "reactiveExpressions": [
       {
         "patterns": ["bonjour", "salut", "coucou"],
-        "response": "Bonjour, je suis HOSHI. Je peux envoyer WhatsApp, lire Hacker News ou ouvrir Yvent."
+        "response": "Bonjour Monsieur. Tous les systèmes sont opérationnels. Que puis-je faire pour vous ?"
       },
       {
         "patterns": ["comment ça va", "ca va", "comment vas-tu"],

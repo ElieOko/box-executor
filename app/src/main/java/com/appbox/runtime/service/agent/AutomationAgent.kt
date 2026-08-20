@@ -35,6 +35,9 @@ class AutomationAgent(
     val workflowEngine: WorkflowEngine,
     val scheduler: SchedulerService,
     private val preferences: HoshiPreferencesStore,
+    private val memory: HoshiMemoryStore,
+    private val contactGroups: ContactGroupStore,
+    private val installedAppScanner: com.appbox.runtime.service.manager.InstalledAppScanner,
     private val openAiRouter: OpenAiIntentRouter = OpenAiIntentRouter(),
     private val onSpeak: (String) -> Unit,
 ) : AgentServiceContract {
@@ -50,14 +53,17 @@ class AutomationAgent(
     override fun logs(): Flow<List<AgentLogEntry>> = _logsFlow.asStateFlow()
     private val _logsFlow = MutableStateFlow<List<AgentLogEntry>>(emptyList())
 
+    fun conversationFlow(): Flow<List<com.appbox.runtime.core.model.ConversationTurn>> = memory.conversationFlow
+
     private var eventJobStarted = false
 
     override suspend fun start(): Result<Unit> = runCatching {
         userConfig = preferences.getConfig()
         loadInstructionsFromAssets().getOrThrow()
         applyInstructions(instructions!!).getOrThrow()
-        onSpeak("Bonjour, je suis HOSHI. Je vous écoute.")
-        log(AgentLogLevel.INFO, "HOSHI démarré")
+        val greeting = JarvisPersona.startupGreeting(userConfig)
+        speakAndRemember(greeting)
+        log(AgentLogLevel.INFO, "HOSHI démarré (mode JARVIS=${userConfig.jarvisMode})")
         _state.value = _state.value.copy(status = AgentStatus.IDLE, updatedAt = System.currentTimeMillis())
     }
 
@@ -130,13 +136,19 @@ class AutomationAgent(
         params["whatsapp_phone"] = userConfig.whatsappPhone
         params["whatsapp_message"] = userConfig.whatsappMessage
         params["whatsapp_auto_send"] = userConfig.whatsappAutoSend.toString()
+        params["user_title"] = if (userConfig.jarvisMode) {
+            JarvisPersona.addressTitle(userConfig)
+        } else {
+            userConfig.userTitle
+        }
+        params["user_name"] = userConfig.userName
         return workflowEngine.execute(command.action, params).map { run ->
             _state.value = _state.value.copy(status = AgentStatus.IDLE, activeWorkflowId = null)
             run
         }.onFailure {
             _state.value = _state.value.copy(status = AgentStatus.ERROR)
             log(AgentLogLevel.ERROR, it.message ?: "Erreur commande")
-            onSpeak("Désolé, une erreur s'est produite.")
+            speakAndRemember(JarvisPersona.errorMessage(userConfig))
         }
     }
 
@@ -145,10 +157,14 @@ class AutomationAgent(
         val normalized = normalizeVoiceInput(text)
         if (normalized.isBlank()) {
             if (text.contains("hoshi")) {
-                onSpeak("Oui, je vous écoute.")
+                speakAndRemember(JarvisPersona.wakeAck(userConfig))
             }
             _state.value = _state.value.copy(status = AgentStatus.IDLE)
             return Result.success(null)
+        }
+
+        if (userConfig.memoryEnabled) {
+            memory.addUserTurn(normalized)
         }
 
         _state.value = _state.value.copy(
@@ -168,34 +184,22 @@ class AutomationAgent(
         file: InstructionFile,
         normalized: String,
     ): Result<WorkflowRun?>? {
+        val memoryContext = if (userConfig.memoryEnabled) memory.buildMemoryContext() else ""
+        val recentTurns = if (userConfig.memoryEnabled) memory.getRecentTurns(8) else emptyList()
+
         return openAiRouter.resolveIntent(
             userText = normalized,
             config = userConfig,
             workflows = file.agent.workflows,
             voiceCommands = file.agent.voiceCommands,
+            memoryContext = memoryContext,
+            recentTurns = recentTurns,
+            contactGroupsContext = contactGroups.buildContextForLlm(contactGroups.getGroups()),
+            installedAppsContext = installedAppScanner.scanLaunchableApps()
+                .take(50)
+                .joinToString(", ") { it.displayName },
         ).fold(
-            onSuccess = { intent ->
-                log(AgentLogLevel.INFO, "OpenAI → ${intent.action} ${intent.workflowId ?: ""}")
-                when {
-                    intent.isWorkflowAction() -> {
-                        intent.speak?.let { onSpeak(it) }
-                        handleCommand(
-                            AgentCommand(
-                                id = UUID.randomUUID().toString(),
-                                source = AgentCommandSource.VOICE,
-                                action = intent.workflowId!!,
-                                parameters = intent.parameters,
-                            ),
-                        )
-                    }
-                    intent.isSpeakOnly() -> {
-                        onSpeak(intent.speak!!)
-                        _state.value = _state.value.copy(status = AgentStatus.IDLE)
-                        Result.success(null)
-                    }
-                    else -> null
-                }
-            },
+            onSuccess = { intent -> processOpenAiIntent(intent) },
             onFailure = { error ->
                 log(AgentLogLevel.ERROR, "OpenAI: ${error.message}")
                 null
@@ -203,12 +207,46 @@ class AutomationAgent(
         )
     }
 
+    private suspend fun processOpenAiIntent(intent: com.appbox.runtime.core.model.OpenAiIntentResult): Result<WorkflowRun?>? {
+        log(AgentLogLevel.INFO, "OpenAI → ${intent.action} ${intent.workflowId ?: ""}")
+        return when {
+            intent.isRememberAction() -> {
+                val key = intent.parameters["fact_key"] ?: intent.parameters["key"] ?: ""
+                val value = intent.parameters["fact_value"] ?: intent.parameters["value"] ?: ""
+                if (key.isNotBlank() && value.isNotBlank() && userConfig.memoryEnabled) {
+                    memory.rememberFact(key, value)
+                }
+                val reply = intent.speak ?: "C'est mémorisé, ${JarvisPersona.addressTitle(userConfig)}."
+                speakAndRemember(reply)
+                _state.value = _state.value.copy(status = AgentStatus.IDLE)
+                Result.success(null)
+            }
+            intent.isWorkflowAction() -> {
+                intent.speak?.let { speakAndRemember(it) }
+                handleCommand(
+                    AgentCommand(
+                        id = UUID.randomUUID().toString(),
+                        source = AgentCommandSource.VOICE,
+                        action = intent.workflowId!!,
+                        parameters = intent.parameters,
+                    ),
+                )
+            }
+            intent.isSpeakOnly() -> {
+                speakAndRemember(intent.speak!!)
+                _state.value = _state.value.copy(status = AgentStatus.IDLE)
+                Result.success(null)
+            }
+            else -> null
+        }
+    }
+
     private suspend fun handleVoiceWithRules(
         file: InstructionFile,
         normalized: String,
     ): Result<WorkflowRun?> {
         matchReactiveExpression(file.agent.reactiveExpressions, normalized)?.let { reactive ->
-            reactive.response?.let { onSpeak(it) }
+            reactive.response?.let { speakAndRemember(it) }
             reactive.workflowId?.let { wfId ->
                 return handleCommand(
                     AgentCommand(
@@ -226,12 +264,17 @@ class AutomationAgent(
         val mapping = file.agent.voiceCommands.firstOrNull { cmd ->
             normalized.contains(cmd.phrase.lowercase(Locale.FRANCE))
         } ?: run {
-            onSpeak("Je n'ai pas compris. Dites par exemple : HOSHI, envoie WhatsApp.")
+            val fallback = if (userConfig.jarvisMode) {
+                "Je n'ai pas saisi votre demande, ${JarvisPersona.addressTitle(userConfig)}. Reformulez, s'il vous plaît."
+            } else {
+                "Je n'ai pas compris. Dites par exemple : HOSHI, envoie WhatsApp."
+            }
+            speakAndRemember(fallback)
             _state.value = _state.value.copy(status = AgentStatus.IDLE)
             return Result.success(null)
         }
 
-        onSpeak("D'accord.")
+        speakAndRemember("Très bien.")
         return handleCommand(
             AgentCommand(
                 id = UUID.randomUUID().toString(),
@@ -264,7 +307,13 @@ class AutomationAgent(
     suspend fun onScheduleTriggered(taskId: String, workflowId: String): Result<WorkflowRun?> {
         scheduler.markRun(taskId)
         log(AgentLogLevel.INFO, "Planification $taskId → $workflowId", workflowId)
-        onSpeak("Exécution planifiée.")
+        val taskName = when (taskId) {
+            "jarvis_morning" -> "votre briefing matinal"
+            "whatsapp_daily" -> "l'envoi WhatsApp"
+            "hn_daily" -> "le digest Hacker News"
+            else -> "la tâche planifiée"
+        }
+        speakAndRemember(JarvisPersona.scheduleAck(userConfig, taskName))
         return handleCommand(
             AgentCommand(
                 id = UUID.randomUUID().toString(),
@@ -297,6 +346,13 @@ class AutomationAgent(
                 }
             }
         }
+    }
+
+    private suspend fun speakAndRemember(text: String) {
+        if (userConfig.memoryEnabled) {
+            memory.addAssistantTurn(text)
+        }
+        onSpeak(text)
     }
 
     private fun normalizeVoiceInput(text: String): String {

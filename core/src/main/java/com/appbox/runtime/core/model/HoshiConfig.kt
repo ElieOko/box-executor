@@ -17,4 +17,28 @@ data class HoshiUserConfig(
     val openAiApiKey: String = "",
     val openAiModel: String = "gpt-4o-mini",
     val openAiEnabled: Boolean = true,
+    /** Mode JARVIS — personnalité, proactivité, mémoire */
+    val jarvisMode: Boolean = true,
+    val userTitle: String = "Monsieur",
+    val userName: String = "",
+    val proactiveEnabled: Boolean = true,
+    val morningBriefingHour: Int = 8,
+    val morningBriefingMinute: Int = 0,
+    val memoryEnabled: Boolean = true,
+    val ttsSpeechRate: Float = 0.88f,
+    val ttsPitch: Float = 0.95f,
+    /** Nom de voix TTS Android (vide = auto meilleure voix FR) */
+    val ttsVoiceName: String = "",
+    /** STT — réduction bruit ambiant */
+    val sttSilenceMs: Long = 2200L,
+    val sttNoiseFilterEnabled: Boolean = true,
+    val sttMinConfidence: Float = 0.45f,
+    val sttMinSpeechMs: Long = 400L,
+    /** Traduction automatique des news anglaises */
+    val translateNewsToFrench: Boolean = true,
+    /** Expertise programmation / cloud / K8s dans OpenAI */
+    val techExpertMode: Boolean = true,
+    /** Personnaliser messages WhatsApp via IA par contact */
+    val whatsappPersonalizeWithAi: Boolean = true,
+    val defaultContactGroupId: String = "",
 )
