@@ -193,9 +193,9 @@ class RuntimeViewModel(
         }
     }
 
-    fun openUsageAccessSettings() {
-        appContext.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-    }
+//    fun openUsageAccessSettings() {
+//        appContext.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+//    }
 
     fun refreshUsageAccess() {
         _uiState.update { it.copy(hasUsageAccess = processTracker.hasUsageAccess()) }

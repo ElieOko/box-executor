@@ -1,8 +1,8 @@
-com.appbox.runtime.core-pngs-0 /workspace/core/build/generated/res/pngs/debug
-com.appbox.runtime.core-updated_navigation_xml-1 /workspace/core/build/generated/updated_navigation_xml/debug
-com.appbox.runtime.core-mergeDebugResources-2 /workspace/core/build/intermediates/incremental/debug/mergeDebugResources/merged.dir
-com.appbox.runtime.core-mergeDebugResources-3 /workspace/core/build/intermediates/incremental/debug/mergeDebugResources/stripped.dir
-com.appbox.runtime.core-debug-4 /workspace/core/build/intermediates/merged_res/debug/mergeDebugResources
-com.appbox.runtime.core-debug-5 /workspace/core/build/intermediates/packaged_res/debug/packageDebugResources
-com.appbox.runtime.core-debug-6 /workspace/core/src/debug/res
-com.appbox.runtime.core-main-7 /workspace/core/src/main/res
+com.appbox.runtime.core-pngs-0 /Users/elieoko/AndroidStudioProjects/boxcontrol/core/build/generated/res/pngs/debug
+com.appbox.runtime.core-updated_navigation_xml-1 /Users/elieoko/AndroidStudioProjects/boxcontrol/core/build/generated/updated_navigation_xml/debug
+com.appbox.runtime.core-mergeDebugResources-2 /Users/elieoko/AndroidStudioProjects/boxcontrol/core/build/intermediates/incremental/debug/mergeDebugResources/merged.dir
+com.appbox.runtime.core-mergeDebugResources-3 /Users/elieoko/AndroidStudioProjects/boxcontrol/core/build/intermediates/incremental/debug/mergeDebugResources/stripped.dir
+com.appbox.runtime.core-debug-4 /Users/elieoko/AndroidStudioProjects/boxcontrol/core/build/intermediates/merged_res/debug/mergeDebugResources
+com.appbox.runtime.core-debug-5 /Users/elieoko/AndroidStudioProjects/boxcontrol/core/build/intermediates/packaged_res/debug/packageDebugResources
+com.appbox.runtime.core-debug-6 /Users/elieoko/AndroidStudioProjects/boxcontrol/core/src/debug/res
+com.appbox.runtime.core-main-7 /Users/elieoko/AndroidStudioProjects/boxcontrol/core/src/main/res

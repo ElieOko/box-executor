@@ -11,6 +11,7 @@ import com.appbox.runtime.AppBoxRuntimeApplication
 import com.appbox.runtime.container.LockTaskManager
 import com.appbox.runtime.service.ProcessWatchdogService
 import com.appbox.runtime.ui.screens.OsShell
+import com.appbox.runtime.ui.system.ImmersiveMode
 import com.appbox.runtime.ui.system.ImmersiveModeHost
 import com.appbox.runtime.ui.theme.AppBoxTheme
 
