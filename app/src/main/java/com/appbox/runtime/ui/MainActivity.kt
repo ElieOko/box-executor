@@ -23,8 +23,6 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        ImmersiveMode.apply(this)
-        ProcessWatchdogService.start(this)
 
         immersiveHost = ImmersiveModeHost(this)
         immersiveHost.attach()

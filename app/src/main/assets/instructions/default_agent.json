@@ -1,0 +1,201 @@
+{
+  "version": 1,
+  "agent": {
+    "name": "AppBox Super Agent",
+    "description": "Agent d'automatisation — WhatsApp planifié, digest Hacker News, commandes vocales",
+    "workflows": [
+      {
+        "id": "whatsapp_scheduled_send",
+        "name": "WhatsApp message planifié",
+        "description": "Ouvre WhatsApp avec un message pré-rempli à l'heure indiquée",
+        "enabled": true,
+        "nodes": [
+          {
+            "id": "t1",
+            "type": "TRIGGER_SCHEDULE",
+            "label": "Déclencheur horaire",
+            "config": { "scheduleId": "whatsapp_daily" },
+            "positionX": 80,
+            "positionY": 120
+          },
+          {
+            "id": "n1",
+            "type": "WHATSAPP_PREPARE",
+            "label": "Préparer message",
+            "config": {
+              "phone": "+33600000000",
+              "message": "Bonjour, rappel automatique AppBox — message envoyé à {{time}}"
+            },
+            "positionX": 320,
+            "positionY": 120
+          },
+          {
+            "id": "n2",
+            "type": "WHATSAPP_OPEN",
+            "label": "Ouvrir WhatsApp",
+            "config": { "autoSend": "false" },
+            "positionX": 560,
+            "positionY": 120
+          },
+          {
+            "id": "n3",
+            "type": "NOTIFY",
+            "label": "Confirmation",
+            "config": {
+              "title": "WhatsApp",
+              "body": "Conversation ouverte — validez l'envoi dans WhatsApp"
+            },
+            "positionX": 800,
+            "positionY": 120
+          }
+        ],
+        "edges": [
+          { "id": "e1", "fromNodeId": "t1", "toNodeId": "n1" },
+          { "id": "e2", "fromNodeId": "n1", "toNodeId": "n2" },
+          { "id": "e3", "fromNodeId": "n2", "toNodeId": "n3" }
+        ]
+      },
+      {
+        "id": "hn_daily_digest",
+        "name": "Digest Hacker News",
+        "description": "Récupère les titres du front page et envoie une notification quotidienne",
+        "enabled": true,
+        "nodes": [
+          {
+            "id": "t1",
+            "type": "TRIGGER_SCHEDULE",
+            "label": "Chaque matin 8h",
+            "config": { "scheduleId": "hn_daily" },
+            "positionX": 80,
+            "positionY": 320
+          },
+          {
+            "id": "n1",
+            "type": "HTTP_FETCH",
+            "label": "Fetch HN",
+            "config": {
+              "url": "https://hacker-news.firebaseio.com/v0/topstories.json",
+              "method": "GET"
+            },
+            "positionX": 320,
+            "positionY": 320
+          },
+          {
+            "id": "n2",
+            "type": "PARSE_HN_DIGEST",
+            "label": "Top 5 titres",
+            "config": { "limit": "5" },
+            "positionX": 560,
+            "positionY": 320
+          },
+          {
+            "id": "n3",
+            "type": "NOTIFY",
+            "label": "Notification digest",
+            "config": {
+              "title": "Hacker News — {{date}}",
+              "body": "{{digest}}"
+            },
+            "positionX": 800,
+            "positionY": 320
+          },
+          {
+            "id": "n4",
+            "type": "SPEAK",
+            "label": "Lecture vocale",
+            "config": { "text": "Digest Hacker News prêt. {{digest_short}}" },
+            "positionX": 1040,
+            "positionY": 320
+          }
+        ],
+        "edges": [
+          { "id": "e1", "fromNodeId": "t1", "toNodeId": "n1" },
+          { "id": "e2", "fromNodeId": "n1", "toNodeId": "n2" },
+          { "id": "e3", "fromNodeId": "n2", "toNodeId": "n3" },
+          { "id": "e4", "fromNodeId": "n3", "toNodeId": "n4" }
+        ]
+      },
+      {
+        "id": "voice_launch_yvent",
+        "name": "Lancer Yvent (voix)",
+        "description": "Ouvre com.yvent.app dans la box sur commande vocale",
+        "enabled": true,
+        "nodes": [
+          {
+            "id": "t1",
+            "type": "TRIGGER_VOICE",
+            "label": "Commande vocale",
+            "config": { "phrase": "ouvrir yvent" },
+            "positionX": 80,
+            "positionY": 520
+          },
+          {
+            "id": "n1",
+            "type": "LAUNCH_APP",
+            "label": "Lancer Yvent",
+            "config": {
+              "packageName": "com.yvent.app",
+              "displayName": "Yvent",
+              "inBox": "true"
+            },
+            "positionX": 360,
+            "positionY": 520
+          },
+          {
+            "id": "n2",
+            "type": "SPEAK",
+            "label": "Confirmation",
+            "config": { "text": "Yvent est en cours d'ouverture" },
+            "positionX": 640,
+            "positionY": 520
+          }
+        ],
+        "edges": [
+          { "id": "e1", "fromNodeId": "t1", "toNodeId": "n1" },
+          { "id": "e2", "fromNodeId": "n1", "toNodeId": "n2" }
+        ]
+      }
+    ],
+    "schedules": [
+      {
+        "id": "whatsapp_daily",
+        "name": "WhatsApp quotidien 18h",
+        "workflowId": "whatsapp_scheduled_send",
+        "triggerType": "DAILY_AT",
+        "hour": 18,
+        "minute": 0,
+        "enabled": true
+      },
+      {
+        "id": "hn_daily",
+        "name": "Hacker News 8h",
+        "workflowId": "hn_daily_digest",
+        "triggerType": "DAILY_AT",
+        "hour": 8,
+        "minute": 0,
+        "enabled": true
+      }
+    ],
+    "voiceCommands": [
+      {
+        "phrase": "ouvrir yvent",
+        "workflowId": "voice_launch_yvent"
+      },
+      {
+        "phrase": "digest hacker news",
+        "workflowId": "hn_daily_digest"
+      },
+      {
+        "phrase": "envoyer whatsapp",
+        "workflowId": "whatsapp_scheduled_send",
+        "parameters": { "immediate": "true" }
+      }
+    ],
+    "eventTriggers": [
+      {
+        "topic": "agent.run",
+        "workflowId": "hn_daily_digest"
+      }
+    ]
+  }
+}

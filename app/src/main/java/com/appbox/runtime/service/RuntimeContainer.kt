@@ -1,37 +1,84 @@
 package com.appbox.runtime.service
 
 import android.app.Application
-import com.appbox.runtime.core.contract.AppRegistryContract
-import com.appbox.runtime.core.contract.AuthServiceContract
-import com.appbox.runtime.core.contract.EventBusContract
-import com.appbox.runtime.core.contract.NetworkServiceContract
-import com.appbox.runtime.core.contract.NotificationServiceContract
-import com.appbox.runtime.core.contract.PermissionContract
-import com.appbox.runtime.core.contract.RemoteMonitorContract
-import com.appbox.runtime.core.contract.StorageServiceContract
+import com.appbox.runtime.core.contract.AgentServiceContract
+import com.appbox.runtime.core.contract.SchedulerServiceContract
+import com.appbox.runtime.core.contract.VoiceServiceContract
+import com.appbox.runtime.core.contract.WorkflowServiceContract
 import com.appbox.runtime.core.event.InProcessEventBus
-import com.appbox.runtime.service.auth.AuthService
-import com.appbox.runtime.service.manager.AppRegistry
-import com.appbox.runtime.service.manager.InstalledAppScanner
-import com.appbox.runtime.service.manager.LifecycleManager
-import com.appbox.runtime.service.manager.PermissionManager
-import com.appbox.runtime.service.network.NetworkService
-import com.appbox.runtime.service.notification.NotificationService
-import com.appbox.runtime.service.remote.RemoteMonitorStub
-import com.appbox.runtime.service.storage.StorageService
+import com.appbox.runtime.service.agent.AutomationAgent
+import com.appbox.runtime.service.scheduler.SchedulerService
+import com.appbox.runtime.service.voice.VoiceService
+import com.appbox.runtime.service.workflow.WorkflowEngine
+import kotlinx.coroutines.runBlocking
 
 class RuntimeContainer(application: Application) {
     val eventBus = InProcessEventBus()
-    val remoteMonitor: RemoteMonitorContract = RemoteMonitorStub()
+    val remoteMonitor: com.appbox.runtime.core.contract.RemoteMonitorContract =
+        com.appbox.runtime.service.remote.RemoteMonitorStub()
 
-    val appRegistry: AppRegistryContract = AppRegistry(application, remoteMonitor)
-    val installedAppScanner = InstalledAppScanner(application)
-    val permissionManager: PermissionContract = PermissionManager(appRegistry, remoteMonitor)
-    val authService: AuthServiceContract = AuthService(permissionManager, remoteMonitor)
-    val storageService: StorageServiceContract = StorageService(application, permissionManager)
-    val networkService: NetworkServiceContract = NetworkService(permissionManager, remoteMonitor)
-    val notificationService: NotificationServiceContract =
-        NotificationService(application, permissionManager)
-    val lifecycleManager = LifecycleManager(appRegistry, remoteMonitor)
-    val eventBusContract: EventBusContract = RuntimeEventBus(eventBus, permissionManager)
+    val appRegistry: com.appbox.runtime.core.contract.AppRegistryContract =
+        com.appbox.runtime.service.manager.AppRegistry(application, remoteMonitor)
+    val installedAppScanner = com.appbox.runtime.service.manager.InstalledAppScanner(application)
+    val permissionManager: com.appbox.runtime.core.contract.PermissionContract =
+        com.appbox.runtime.service.manager.PermissionManager(appRegistry, remoteMonitor)
+    val authService: com.appbox.runtime.core.contract.AuthServiceContract =
+        com.appbox.runtime.service.auth.AuthService(permissionManager, remoteMonitor)
+    val storageService: com.appbox.runtime.core.contract.StorageServiceContract =
+        com.appbox.runtime.service.storage.StorageService(application, permissionManager)
+    val networkService: com.appbox.runtime.core.contract.NetworkServiceContract =
+        com.appbox.runtime.service.network.NetworkService(permissionManager, remoteMonitor)
+    val notificationService: com.appbox.runtime.core.contract.NotificationServiceContract =
+        com.appbox.runtime.service.notification.NotificationService(application, permissionManager)
+    val lifecycleManager = com.appbox.runtime.service.manager.LifecycleManager(appRegistry, remoteMonitor)
+    val eventBusContract: com.appbox.runtime.core.contract.EventBusContract =
+        RuntimeEventBus(eventBus, permissionManager)
+
+    lateinit var voiceService: VoiceServiceContract
+        private set
+
+    lateinit var workflowEngine: WorkflowEngine
+        private set
+
+    lateinit var scheduler: SchedulerService
+        private set
+
+    lateinit var automationAgent: AutomationAgent
+        private set
+
+    val workflowService: WorkflowServiceContract get() = workflowEngine
+    val agentService: AgentServiceContract get() = automationAgent
+    val schedulerService: SchedulerServiceContract get() = scheduler
+
+    private var speakCallback: (String) -> Unit = {}
+
+    init {
+        workflowEngine = WorkflowEngine(
+            context = application,
+            container = this,
+            onSpeak = { text -> speakCallback(text) },
+        )
+        scheduler = SchedulerService(application) { task ->
+            automationAgent.onScheduleTriggered(task.id, task.workflowId)
+        }
+        automationAgent = AutomationAgent(
+            context = application,
+            workflowEngine = workflowEngine,
+            scheduler = scheduler,
+            onSpeak = { text -> speakCallback(text) },
+        )
+        voiceService = VoiceService(application) { transcript ->
+            automationAgent.handleVoice(transcript)
+        }
+        speakCallback = { text -> voiceService.speak(text) }
+    }
+
+    fun initializeAutomation() {
+        runBlocking {
+            workflowEngine.initialize()
+            scheduler.initialize()
+            automationAgent.start()
+            automationAgent.subscribeToEvents(eventBus)
+        }
+    }
 }

@@ -10,6 +10,7 @@ import com.appbox.runtime.core.contract.NotificationServiceContract
 import com.appbox.runtime.core.contract.PermissionContract
 import com.appbox.runtime.core.model.RuntimeNotification
 import com.appbox.runtime.core.model.RuntimePermission
+import com.appbox.runtime.core.security.RuntimeConstants
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -24,11 +25,14 @@ class NotificationService(
 
     init {
         createDefaultChannel()
+        createAgentChannel()
     }
 
     override suspend fun post(notification: RuntimeNotification): Result<Unit> = mutex.withLock {
         runCatching {
-            if (!permissions.hasPermission(notification.sourcePackage, RuntimePermission.NOTIFICATIONS_POST)) {
+            if (notification.sourcePackage != RuntimeConstants.RUNTIME_PACKAGE &&
+                !permissions.hasPermission(notification.sourcePackage, RuntimePermission.NOTIFICATIONS_POST)
+            ) {
                 throw SecurityException("NOTIFICATIONS_POST not granted for ${notification.sourcePackage}")
             }
 
@@ -59,6 +63,18 @@ class NotificationService(
                 "appbox_default",
                 "AppBox Notifications",
                 NotificationManager.IMPORTANCE_DEFAULT,
+            )
+            val manager = context.getSystemService(NotificationManager::class.java)
+            manager.createNotificationChannel(channel)
+        }
+    }
+
+    private fun createAgentChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                "appbox_agent",
+                "AppBox Agent",
+                NotificationManager.IMPORTANCE_HIGH,
             )
             val manager = context.getSystemService(NotificationManager::class.java)
             manager.createNotificationChannel(channel)

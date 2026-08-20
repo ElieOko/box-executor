@@ -142,3 +142,4 @@ Fonctionnalités prévues :
 3. Plugin Gradle pour validation SDK à la compilation
 4. Serveur central (API REST + WebSocket)
 5. Support Work Profile pour isolation renforcée
+6. **Super Agent** — voir [AGENT.md](AGENT.md) : workflows n8n, voix, planification, WhatsApp, Hacker News
