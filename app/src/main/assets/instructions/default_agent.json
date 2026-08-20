@@ -259,6 +259,78 @@
           { "id": "e1", "fromNodeId": "t1", "toNodeId": "n1" },
           { "id": "e2", "fromNodeId": "n1", "toNodeId": "n2" }
         ]
+      },
+      {
+        "id": "whatsapp_group_broadcast",
+        "name": "WhatsApp groupe personnalisé",
+        "description": "Envoie un message personnalisé à chaque contact du groupe",
+        "enabled": true,
+        "nodes": [
+          {
+            "id": "t1",
+            "type": "TRIGGER_VOICE",
+            "label": "Commande groupe",
+            "config": {},
+            "positionX": 60,
+            "positionY": 1100
+          },
+          {
+            "id": "n1",
+            "type": "WHATSAPP_BROADCAST",
+            "label": "Broadcast IA",
+            "config": { "delayBetweenMs": "4000" },
+            "positionX": 300,
+            "positionY": 1100
+          },
+          {
+            "id": "n2",
+            "type": "SPEAK",
+            "label": "Confirmation",
+            "config": { "text": "{{user_title}}, messages envoyés à {{broadcast_sent}} contacts sur {{broadcast_total}}." },
+            "positionX": 560,
+            "positionY": 1100
+          }
+        ],
+        "edges": [
+          { "id": "e1", "fromNodeId": "t1", "toNodeId": "n1" },
+          { "id": "e2", "fromNodeId": "n1", "toNodeId": "n2" }
+        ]
+      },
+      {
+        "id": "launch_any_app",
+        "name": "Ouvrir une application",
+        "description": "Lance n'importe quelle app installée par son nom",
+        "enabled": true,
+        "nodes": [
+          {
+            "id": "t1",
+            "type": "TRIGGER_VOICE",
+            "label": "Commande app",
+            "config": {},
+            "positionX": 60,
+            "positionY": 1300
+          },
+          {
+            "id": "n1",
+            "type": "LAUNCH_APP_BY_NAME",
+            "label": "Ouvrir app",
+            "config": { "inBox": "false" },
+            "positionX": 300,
+            "positionY": 1300
+          },
+          {
+            "id": "n2",
+            "type": "SPEAK",
+            "label": "Confirmé",
+            "config": { "text": "Application ouverte, {{user_title}}." },
+            "positionX": 560,
+            "positionY": 1300
+          }
+        ],
+        "edges": [
+          { "id": "e1", "fromNodeId": "t1", "toNodeId": "n1" },
+          { "id": "e2", "fromNodeId": "n1", "toNodeId": "n2" }
+        ]
       }
     ],
     "schedules": [],
@@ -270,7 +342,11 @@
       { "phrase": "ouvrir yvent", "workflowId": "voice_launch_yvent" },
       { "phrase": "lis l'écran", "workflowId": "jarvis_read_screen" },
       { "phrase": "que vois-tu", "workflowId": "jarvis_read_screen" },
-      { "phrase": "briefing", "workflowId": "jarvis_morning_briefing" }
+      { "phrase": "briefing", "workflowId": "jarvis_morning_briefing" },
+      { "phrase": "envoie au groupe", "workflowId": "whatsapp_group_broadcast" },
+      { "phrase": "message au groupe", "workflowId": "whatsapp_group_broadcast" },
+      { "phrase": "ouvre", "workflowId": "launch_any_app" },
+      { "phrase": "ouvrir", "workflowId": "launch_any_app" }
     ],
     "reactiveExpressions": [
       {

@@ -54,6 +54,8 @@ class RuntimeContainer(application: Application) {
 
     val hoshiPreferences = com.appbox.runtime.service.agent.HoshiPreferencesStore(application)
     val hoshiMemory = com.appbox.runtime.service.agent.HoshiMemoryStore(application)
+    val contactGroups = com.appbox.runtime.service.agent.ContactGroupStore(application)
+    val openAiClient = com.appbox.runtime.service.agent.OpenAiClient()
 
     init {
         workflowEngine = WorkflowEngine(
@@ -70,6 +72,8 @@ class RuntimeContainer(application: Application) {
             scheduler = scheduler,
             preferences = hoshiPreferences,
             memory = hoshiMemory,
+            contactGroups = contactGroups,
+            installedAppScanner = installedAppScanner,
             onSpeak = { text -> speakCallback(text) },
         )
         voiceService = VoiceService(application) { transcript ->

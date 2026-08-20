@@ -156,6 +156,8 @@ fun OsShell(
                         schedules = uiState.schedules,
                         runs = uiState.workflowRuns,
                         logs = uiState.agentLogs,
+                        contactGroups = uiState.contactGroups,
+                        onContactGroupsChange = viewModel::updateContactGroups,
                         onReloadInstructions = viewModel::reloadAgentInstructions,
                         onConfigChange = viewModel::updateHoshiConfig,
                         onSaveConfig = viewModel::saveHoshiConfig,

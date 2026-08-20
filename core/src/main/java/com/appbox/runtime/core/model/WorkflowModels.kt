@@ -25,6 +25,10 @@ enum class WorkflowNodeType {
     UI_GLOBAL_ACTION,
     MEMORY_WRITE,
     MEMORY_READ,
+    TRANSLATE_TEXT,
+    WHATSAPP_BROADCAST,
+    LAUNCH_APP_BY_NAME,
+    OPEN_SYSTEM_APP,
 }
 
 @Serializable

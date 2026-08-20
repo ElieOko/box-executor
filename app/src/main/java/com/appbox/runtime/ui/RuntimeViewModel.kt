@@ -71,6 +71,7 @@ data class RuntimeUiState(
     val accessibilityEnabled: Boolean = false,
     val openAiKeyConfigured: Boolean = false,
     val conversationTurns: List<com.appbox.runtime.core.model.ConversationTurn> = emptyList(),
+    val contactGroups: List<com.appbox.runtime.core.model.HoshiContactGroup> = emptyList(),
 )
 
 class RuntimeViewModel(
@@ -356,6 +357,18 @@ class RuntimeViewModel(
             }
         }
         viewModelScope.launch {
+            container.contactGroups.groupsFlow.collect { groups ->
+                _uiState.update { state ->
+                    state.copy(
+                        contactGroups = groups,
+                        hoshiConfig = if (state.hoshiConfig.defaultContactGroupId.isBlank() && groups.isNotEmpty()) {
+                            state.hoshiConfig.copy(defaultContactGroupId = groups.first().id)
+                        } else state.hoshiConfig,
+                    )
+                }
+            }
+        }
+        viewModelScope.launch {
             com.appbox.runtime.accessibility.HoshiAccessibilityService.isConnected.collect { enabled ->
                 _uiState.update { it.copy(accessibilityEnabled = enabled) }
             }
@@ -368,6 +381,10 @@ class RuntimeViewModel(
         _uiState.update { it.copy(hoshiConfig = config) }
     }
 
+    fun updateContactGroups(groups: List<com.appbox.runtime.core.model.HoshiContactGroup>) {
+        _uiState.update { it.copy(contactGroups = groups) }
+    }
+
     fun saveHoshiConfig() {
         viewModelScope.launch {
             val uiConfig = _uiState.value.hoshiConfig
@@ -377,6 +394,7 @@ class RuntimeViewModel(
             } else {
                 uiConfig
             }
+            container.contactGroups.saveGroups(_uiState.value.contactGroups)
             container.automationAgent.saveUserConfig(config)
                 .onSuccess {
                     (container.voiceService as? com.appbox.runtime.service.voice.VoiceService)?.applyVoiceProfile(config)

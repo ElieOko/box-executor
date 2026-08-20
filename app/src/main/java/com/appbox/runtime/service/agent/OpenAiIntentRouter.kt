@@ -27,13 +27,18 @@ class OpenAiIntentRouter(
         voiceCommands: List<VoiceCommandMapping>,
         memoryContext: String = "",
         recentTurns: List<ConversationTurn> = emptyList(),
+        contactGroupsContext: String = "",
+        installedAppsContext: String = "",
     ): Result<OpenAiIntentResult> = withContext(Dispatchers.IO) {
         val apiKey = config.openAiApiKey.trim()
         if (apiKey.isBlank() || !config.openAiEnabled) {
             return@withContext Result.failure(IllegalStateException("OpenAI non configuré"))
         }
         runCatching {
-            val body = buildRequestBody(userText, config, workflows, voiceCommands, memoryContext, recentTurns)
+            val body = buildRequestBody(
+                userText, config, workflows, voiceCommands, memoryContext, recentTurns,
+                contactGroupsContext, installedAppsContext,
+            )
             val responseText = postChatCompletion(apiKey, body)
             parseIntentResponse(responseText)
         }
@@ -46,6 +51,8 @@ class OpenAiIntentRouter(
         voiceCommands: List<VoiceCommandMapping>,
         memoryContext: String,
         recentTurns: List<ConversationTurn>,
+        contactGroupsContext: String,
+        installedAppsContext: String,
     ): String {
         val time = SimpleDateFormat("EEEE dd/MM/yyyy HH:mm", Locale.FRANCE).format(Date())
         val workflowList = workflows.joinToString("\n") { wf ->
@@ -55,8 +62,16 @@ class OpenAiIntentRouter(
             "- \"${cmd.phrase}\" → ${cmd.workflowId}"
         }
         val persona = JarvisPersona.systemPromptPrefix(config)
+        val techExpertise = if (config.techExpertMode) """
+            Expertise technique (niveau architecte senior):
+            Programmation, architecture logicielle, cloud native, Kubernetes, DevOps, CI/CD.
+            Pour questions tech: action=speak avec réponse précise et structurée.
+        """.trimIndent() else ""
+        val maxTokens = if (config.techExpertMode && looksLikeTechQuestion(userText)) 700 else 450
+
         val systemPrompt = """
             $persona
+            $techExpertise
             Analyse la demande et réponds UNIQUEMENT en JSON valide.
 
             Workflows disponibles:
@@ -65,28 +80,30 @@ class OpenAiIntentRouter(
             Exemples de commandes:
             $commandList
 
+            Applications installées:
+            $installedAppsContext
+
+            Groupes contacts WhatsApp:
+            $contactGroupsContext
+
             Config:
             - WhatsApp: ${config.whatsappPhone}, message: ${config.whatsappMessage}
             - Heure WhatsApp: ${config.whatsappHour}:${"%02d".format(config.whatsappMinute)}
-            - Briefing matinal: ${config.morningBriefingHour}:${"%02d".format(config.morningBriefingMinute)}
+            - Briefing: ${config.morningBriefingHour}:${"%02d".format(config.morningBriefingMinute)}
+            - Groupe défaut: ${config.defaultContactGroupId.ifBlank { "aucun" }}
             - Maintenant: $time
 
             ${if (memoryContext.isNotBlank()) "Mémoire:\n$memoryContext" else ""}
 
-            Schéma JSON strict:
-            {
-              "action": "workflow" | "speak" | "remember" | "unknown",
-              "workflow_id": "id ou null",
-              "parameters": { "cle": "valeur" },
-              "speak": "réponse TTS en français"
-            }
+            Schéma JSON:
+            { "action": "workflow"|"speak"|"remember"|"unknown", "workflow_id": "...", "parameters": {}, "speak": "..." }
 
             Règles:
-            - workflow: exécuter une automatisation (workflow_id requis)
-            - speak: conversation, statut, clarification
-            - remember: mémoriser un fait (parameters: fact_key, fact_value) — ex. préférence utilisateur
-            - unknown: hors périmètre
-            - speak concis, ton JARVIS si mode actif
+            - whatsapp_group_broadcast: params contact_group_id, message_hint
+            - launch_app_by_name: params app_name (Instagram, Chrome, etc.)
+            - open_system_app: params app_target (settings, wifi)
+            - speak: conversation et questions tech détaillées
+            - remember: fact_key, fact_value
         """.trimIndent()
 
         val messages = JSONArray().put(JSONObject().put("role", "system").put("content", systemPrompt))
@@ -99,7 +116,7 @@ class OpenAiIntentRouter(
         return JSONObject()
             .put("model", config.openAiModel.ifBlank { "gpt-4o-mini" })
             .put("temperature", if (config.jarvisMode) 0.35 else 0.2)
-            .put("max_tokens", 450)
+            .put("max_tokens", maxTokens)
             .put("response_format", JSONObject().put("type", "json_object"))
             .put("messages", messages)
             .toString()
@@ -147,5 +164,15 @@ class OpenAiIntentRouter(
         } finally {
             connection.disconnect()
         }
+    }
+
+    private fun looksLikeTechQuestion(text: String): Boolean {
+        val keywords = listOf(
+            "kubernetes", "k8s", "docker", "cloud", "programm", "code", "architecture",
+            "microservice", "api", "kotlin", "java", "python", "terraform", "helm",
+            "devops", "gitops", "cluster", "pod", "deploy",
+        )
+        val lower = text.lowercase()
+        return keywords.any { lower.contains(it) }
     }
 }

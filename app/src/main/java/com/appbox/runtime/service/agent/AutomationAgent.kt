@@ -36,6 +36,8 @@ class AutomationAgent(
     val scheduler: SchedulerService,
     private val preferences: HoshiPreferencesStore,
     private val memory: HoshiMemoryStore,
+    private val contactGroups: ContactGroupStore,
+    private val installedAppScanner: com.appbox.runtime.service.manager.InstalledAppScanner,
     private val openAiRouter: OpenAiIntentRouter = OpenAiIntentRouter(),
     private val onSpeak: (String) -> Unit,
 ) : AgentServiceContract {
@@ -192,6 +194,10 @@ class AutomationAgent(
             voiceCommands = file.agent.voiceCommands,
             memoryContext = memoryContext,
             recentTurns = recentTurns,
+            contactGroupsContext = contactGroups.buildContextForLlm(contactGroups.getGroups()),
+            installedAppsContext = installedAppScanner.scanLaunchableApps()
+                .take(50)
+                .joinToString(", ") { it.displayName },
         ).fold(
             onSuccess = { intent -> processOpenAiIntent(intent) },
             onFailure = { error ->

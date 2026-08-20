@@ -45,6 +45,16 @@ class HoshiPreferencesStore(private val context: Context) {
         val morningHour = intPreferencesKey("morning_briefing_hour")
         val morningMinute = intPreferencesKey("morning_briefing_minute")
         val memoryEnabled = booleanPreferencesKey("memory_enabled")
+        val ttsVoiceName = stringPreferencesKey("tts_voice_name")
+        val ttsSpeechRate = stringPreferencesKey("tts_speech_rate")
+        val ttsPitch = stringPreferencesKey("tts_pitch")
+        val sttSilenceMs = intPreferencesKey("stt_silence_ms")
+        val sttNoiseFilter = booleanPreferencesKey("stt_noise_filter")
+        val sttMinConfidence = stringPreferencesKey("stt_min_confidence")
+        val translateNews = booleanPreferencesKey("translate_news")
+        val techExpert = booleanPreferencesKey("tech_expert")
+        val waPersonalize = booleanPreferencesKey("wa_personalize_ai")
+        val defaultGroupId = stringPreferencesKey("default_contact_group_id")
     }
 
     val configFlow: Flow<HoshiUserConfig> = context.hoshiPrefs.data.map { prefs ->
@@ -70,6 +80,16 @@ class HoshiPreferencesStore(private val context: Context) {
             morningBriefingHour = prefs[Keys.morningHour] ?: 8,
             morningBriefingMinute = prefs[Keys.morningMinute] ?: 0,
             memoryEnabled = prefs[Keys.memoryEnabled] ?: true,
+            ttsVoiceName = prefs[Keys.ttsVoiceName] ?: "",
+            ttsSpeechRate = prefs[Keys.ttsSpeechRate]?.toFloatOrNull() ?: 0.88f,
+            ttsPitch = prefs[Keys.ttsPitch]?.toFloatOrNull() ?: 0.95f,
+            sttSilenceMs = (prefs[Keys.sttSilenceMs] ?: 2200).toLong(),
+            sttNoiseFilterEnabled = prefs[Keys.sttNoiseFilter] ?: true,
+            sttMinConfidence = prefs[Keys.sttMinConfidence]?.toFloatOrNull() ?: 0.45f,
+            translateNewsToFrench = prefs[Keys.translateNews] ?: true,
+            techExpertMode = prefs[Keys.techExpert] ?: true,
+            whatsappPersonalizeWithAi = prefs[Keys.waPersonalize] ?: true,
+            defaultContactGroupId = prefs[Keys.defaultGroupId] ?: "",
         )
     }
 
@@ -98,6 +118,16 @@ class HoshiPreferencesStore(private val context: Context) {
             prefs[Keys.morningHour] = config.morningBriefingHour
             prefs[Keys.morningMinute] = config.morningBriefingMinute
             prefs[Keys.memoryEnabled] = config.memoryEnabled
+            prefs[Keys.ttsVoiceName] = config.ttsVoiceName
+            prefs[Keys.ttsSpeechRate] = config.ttsSpeechRate.toString()
+            prefs[Keys.ttsPitch] = config.ttsPitch.toString()
+            prefs[Keys.sttSilenceMs] = config.sttSilenceMs.toInt()
+            prefs[Keys.sttNoiseFilter] = config.sttNoiseFilterEnabled
+            prefs[Keys.sttMinConfidence] = config.sttMinConfidence.toString()
+            prefs[Keys.translateNews] = config.translateNewsToFrench
+            prefs[Keys.techExpert] = config.techExpertMode
+            prefs[Keys.waPersonalize] = config.whatsappPersonalizeWithAi
+            prefs[Keys.defaultGroupId] = config.defaultContactGroupId
         }
     }
 
