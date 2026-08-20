@@ -17,4 +17,14 @@ data class HoshiUserConfig(
     val openAiApiKey: String = "",
     val openAiModel: String = "gpt-4o-mini",
     val openAiEnabled: Boolean = true,
+    /** Mode JARVIS — personnalité, proactivité, mémoire */
+    val jarvisMode: Boolean = true,
+    val userTitle: String = "Monsieur",
+    val userName: String = "",
+    val proactiveEnabled: Boolean = true,
+    val morningBriefingHour: Int = 8,
+    val morningBriefingMinute: Int = 0,
+    val memoryEnabled: Boolean = true,
+    val ttsSpeechRate: Float = 0.88f,
+    val ttsPitch: Float = 0.95f,
 )

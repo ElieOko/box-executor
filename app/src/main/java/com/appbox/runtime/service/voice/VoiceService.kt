@@ -90,8 +90,8 @@ class VoiceService(
     private fun configureFrenchVoice() {
         val engine = tts ?: return
         engine.language = Locale.FRANCE
-        engine.setSpeechRate(0.92f)
-        engine.setPitch(1.02f)
+        engine.setSpeechRate(0.88f)
+        engine.setPitch(0.95f)
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
             engine.voices
                 ?.filter { it.locale.language == "fr" }
@@ -131,6 +131,15 @@ class VoiceService(
     }
 
     override fun speakAsHoshi(text: String) = speak(text)
+
+    fun applyVoiceProfile(config: com.appbox.runtime.core.model.HoshiUserConfig) {
+        if (!ttsReady) return
+        tts?.setSpeechRate(config.ttsSpeechRate)
+        tts?.setPitch(config.ttsPitch)
+        if (config.jarvisMode) {
+            configureFrenchVoice()
+        }
+    }
 
     fun release() {
         continuousEnabled = false

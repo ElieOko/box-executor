@@ -53,6 +53,7 @@ class RuntimeContainer(application: Application) {
     private var speakCallback: (String) -> Unit = {}
 
     val hoshiPreferences = com.appbox.runtime.service.agent.HoshiPreferencesStore(application)
+    val hoshiMemory = com.appbox.runtime.service.agent.HoshiMemoryStore(application)
 
     init {
         workflowEngine = WorkflowEngine(
@@ -68,6 +69,7 @@ class RuntimeContainer(application: Application) {
             workflowEngine = workflowEngine,
             scheduler = scheduler,
             preferences = hoshiPreferences,
+            memory = hoshiMemory,
             onSpeak = { text -> speakCallback(text) },
         )
         voiceService = VoiceService(application) { transcript ->

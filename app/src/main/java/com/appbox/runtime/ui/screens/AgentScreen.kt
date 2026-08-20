@@ -24,6 +24,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.appbox.runtime.core.model.ConversationTurn
 import com.appbox.runtime.core.model.AgentLogEntry
 import com.appbox.runtime.core.model.HoshiUserConfig
 import com.appbox.runtime.core.model.ScheduleTriggerType
@@ -39,6 +40,7 @@ import java.util.Locale
 @Composable
 fun AgentScreen(
     lastVoiceText: String?,
+    conversationTurns: List<ConversationTurn>,
     hoshiConfig: HoshiUserConfig,
     openAiKeyConfigured: Boolean,
     accessibilityEnabled: Boolean,
@@ -55,7 +57,11 @@ fun AgentScreen(
             Column(modifier = Modifier.padding(14.dp)) {
                 Text("HOSHI", color = AppBoxThemeColors.Accent, fontWeight = FontWeight.Bold, fontSize = 22.sp)
                 Text(
-                    "Écoute active en permanence — dites « HOSHI » puis votre commande. OpenAI activé si clé configurée.",
+                    if (hoshiConfig.jarvisMode) {
+                        "Mode JARVIS — écoute permanente, mémoire, briefing matinal, contrôle UI"
+                    } else {
+                        "Écoute active — dites « HOSHI » puis votre commande"
+                    },
                     color = AppBoxThemeColors.TextSecondary,
                     fontSize = 12.sp,
                 )
@@ -90,7 +96,7 @@ fun AgentScreen(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        HoshiStatusFooter(schedules, runs, logs, lastVoiceText, accessibilityEnabled)
+        HoshiStatusFooter(schedules, runs, logs, lastVoiceText, conversationTurns, accessibilityEnabled)
     }
 }
 
@@ -100,18 +106,33 @@ private fun HoshiStatusFooter(
     runs: List<WorkflowRun>,
     logs: List<AgentLogEntry>,
     lastVoiceText: String?,
+    conversationTurns: List<ConversationTurn>,
     accessibilityEnabled: Boolean,
 ) {
     AppBoxPanel(cornerRadius = 14.dp, modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(12.dp)) {
             Text(
-                if (accessibilityEnabled) "WhatsApp : envoi automatique activé" else "WhatsApp : activez Accessibilité HOSHI",
+                if (accessibilityEnabled) "JARVIS UI : contrôle écran activé" else "JARVIS UI : activez Accessibilité HOSHI",
                 color = if (accessibilityEnabled) Color(0xFF48BB78) else AppBoxThemeColors.Accent,
                 fontSize = 11.sp,
             )
             lastVoiceText?.let {
                 Spacer(modifier = Modifier.height(4.dp))
                 Text("Entendu : \"$it\"", color = AppBoxThemeColors.TextSecondary, fontSize = 11.sp)
+            }
+            if (conversationTurns.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(6.dp))
+                Text("Conversation", color = AppBoxThemeColors.TextPrimary, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                conversationTurns.takeLast(4).forEach { turn ->
+                    val prefix = if (turn.role == "assistant") "HOSHI" else "Vous"
+                    Text(
+                        "$prefix : ${turn.text}",
+                        color = if (turn.role == "assistant") AppBoxThemeColors.Accent else AppBoxThemeColors.TextSecondary,
+                        fontSize = 10.sp,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
             Spacer(modifier = Modifier.height(6.dp))
             schedules.take(2).forEach { task ->

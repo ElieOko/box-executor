@@ -38,6 +38,13 @@ class HoshiPreferencesStore(private val context: Context) {
         val openAiApiKey = stringPreferencesKey("openai_api_key")
         val openAiModel = stringPreferencesKey("openai_model")
         val openAiEnabled = booleanPreferencesKey("openai_enabled")
+        val jarvisMode = booleanPreferencesKey("jarvis_mode")
+        val userTitle = stringPreferencesKey("user_title")
+        val userName = stringPreferencesKey("user_name")
+        val proactiveEnabled = booleanPreferencesKey("proactive_enabled")
+        val morningHour = intPreferencesKey("morning_briefing_hour")
+        val morningMinute = intPreferencesKey("morning_briefing_minute")
+        val memoryEnabled = booleanPreferencesKey("memory_enabled")
     }
 
     val configFlow: Flow<HoshiUserConfig> = context.hoshiPrefs.data.map { prefs ->
@@ -56,6 +63,13 @@ class HoshiPreferencesStore(private val context: Context) {
             openAiApiKey = prefs[Keys.openAiApiKey] ?: "",
             openAiModel = prefs[Keys.openAiModel] ?: "gpt-4o-mini",
             openAiEnabled = prefs[Keys.openAiEnabled] ?: true,
+            jarvisMode = prefs[Keys.jarvisMode] ?: true,
+            userTitle = prefs[Keys.userTitle] ?: "Monsieur",
+            userName = prefs[Keys.userName] ?: "",
+            proactiveEnabled = prefs[Keys.proactiveEnabled] ?: true,
+            morningBriefingHour = prefs[Keys.morningHour] ?: 8,
+            morningBriefingMinute = prefs[Keys.morningMinute] ?: 0,
+            memoryEnabled = prefs[Keys.memoryEnabled] ?: true,
         )
     }
 
@@ -77,6 +91,13 @@ class HoshiPreferencesStore(private val context: Context) {
             }
             prefs[Keys.openAiModel] = config.openAiModel
             prefs[Keys.openAiEnabled] = config.openAiEnabled
+            prefs[Keys.jarvisMode] = config.jarvisMode
+            prefs[Keys.userTitle] = config.userTitle
+            prefs[Keys.userName] = config.userName
+            prefs[Keys.proactiveEnabled] = config.proactiveEnabled
+            prefs[Keys.morningHour] = config.morningBriefingHour
+            prefs[Keys.morningMinute] = config.morningBriefingMinute
+            prefs[Keys.memoryEnabled] = config.memoryEnabled
         }
     }
 
@@ -120,30 +141,62 @@ class HoshiPreferencesStore(private val context: Context) {
                     } else node
                 },
             )
+            "jarvis_morning_briefing" -> wf.copy(
+                nodes = wf.nodes.map { node ->
+                    when (node.type) {
+                        WorkflowNodeType.SPEAK -> node.copy(
+                            config = node.config + mapOf(
+                                "text" to "Bonjour {{user_title}}. Briefing matinal. {{digest_short}}",
+                            ),
+                        )
+                        WorkflowNodeType.HTTP_FETCH -> node.copy(
+                            config = node.config + mapOf(
+                                "url" to "https://news.ycombinator.com/",
+                                "method" to "GET",
+                            ),
+                        )
+                        else -> node
+                    }
+                },
+            )
             else -> wf
         }
     }
 
-    fun buildSchedules(config: HoshiUserConfig): List<ScheduledTask> = listOf(
-        ScheduledTask(
-            id = "whatsapp_daily",
-            name = "WhatsApp HOSHI ${"%02d".format(config.whatsappHour)}:${"%02d".format(config.whatsappMinute)}",
-            workflowId = "whatsapp_scheduled_send",
-            triggerType = ScheduleTriggerType.DAILY_AT,
-            hour = config.whatsappHour,
-            minute = config.whatsappMinute,
-            enabled = true,
-        ),
-        ScheduledTask(
-            id = "hn_daily",
-            name = "Hacker News HOSHI ${"%02d".format(config.hnHour)}:${"%02d".format(config.hnMinute)}",
-            workflowId = "hn_daily_digest",
-            triggerType = ScheduleTriggerType.DAILY_AT,
-            hour = config.hnHour,
-            minute = config.hnMinute,
-            enabled = true,
-        ),
-    )
+    fun buildSchedules(config: HoshiUserConfig): List<ScheduledTask> {
+        val schedules = mutableListOf(
+            ScheduledTask(
+                id = "whatsapp_daily",
+                name = "WhatsApp HOSHI ${"%02d".format(config.whatsappHour)}:${"%02d".format(config.whatsappMinute)}",
+                workflowId = "whatsapp_scheduled_send",
+                triggerType = ScheduleTriggerType.DAILY_AT,
+                hour = config.whatsappHour,
+                minute = config.whatsappMinute,
+                enabled = true,
+            ),
+            ScheduledTask(
+                id = "hn_daily",
+                name = "Hacker News HOSHI ${"%02d".format(config.hnHour)}:${"%02d".format(config.hnMinute)}",
+                workflowId = "hn_daily_digest",
+                triggerType = ScheduleTriggerType.DAILY_AT,
+                hour = config.hnHour,
+                minute = config.hnMinute,
+                enabled = true,
+            ),
+        )
+        if (config.jarvisMode && config.proactiveEnabled) {
+            schedules += ScheduledTask(
+                id = "jarvis_morning",
+                name = "Briefing JARVIS ${"%02d".format(config.morningBriefingHour)}:${"%02d".format(config.morningBriefingMinute)}",
+                workflowId = "jarvis_morning_briefing",
+                triggerType = ScheduleTriggerType.DAILY_AT,
+                hour = config.morningBriefingHour,
+                minute = config.morningBriefingMinute,
+                enabled = true,
+            )
+        }
+        return schedules
+    }
 
     private fun defaultWakeWords() = listOf("hoshi", "hey hoshi", "ok hoshi", "dis hoshi")
 }

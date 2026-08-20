@@ -20,6 +20,11 @@ enum class WorkflowNodeType {
     STORE,
     SPEAK,
     PUBLISH_EVENT,
+    UI_TAP_TEXT,
+    UI_READ_SCREEN,
+    UI_GLOBAL_ACTION,
+    MEMORY_WRITE,
+    MEMORY_READ,
 }
 
 @Serializable

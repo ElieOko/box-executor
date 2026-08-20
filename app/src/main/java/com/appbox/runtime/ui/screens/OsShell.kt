@@ -149,6 +149,7 @@ fun OsShell(
                     )
                     OsScreen.AGENT -> AgentScreen(
                         lastVoiceText = uiState.lastVoiceText,
+                        conversationTurns = uiState.conversationTurns,
                         hoshiConfig = uiState.hoshiConfig,
                         openAiKeyConfigured = uiState.openAiKeyConfigured,
                         accessibilityEnabled = uiState.accessibilityEnabled,

@@ -70,6 +70,7 @@ data class RuntimeUiState(
     val workflowEditMode: Boolean = false,
     val accessibilityEnabled: Boolean = false,
     val openAiKeyConfigured: Boolean = false,
+    val conversationTurns: List<com.appbox.runtime.core.model.ConversationTurn> = emptyList(),
 )
 
 class RuntimeViewModel(
@@ -346,6 +347,12 @@ class RuntimeViewModel(
                         openAiKeyConfigured = config.openAiApiKey.isNotBlank(),
                     )
                 }
+                (container.voiceService as? com.appbox.runtime.service.voice.VoiceService)?.applyVoiceProfile(config)
+            }
+        }
+        viewModelScope.launch {
+            container.automationAgent.conversationFlow().collect { turns ->
+                _uiState.update { it.copy(conversationTurns = turns) }
             }
         }
         viewModelScope.launch {
@@ -372,6 +379,7 @@ class RuntimeViewModel(
             }
             container.automationAgent.saveUserConfig(config)
                 .onSuccess {
+                    (container.voiceService as? com.appbox.runtime.service.voice.VoiceService)?.applyVoiceProfile(config)
                     container.voiceService.startContinuousListening()
                     refreshAgentData()
                     _uiState.update {

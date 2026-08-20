@@ -13,4 +13,7 @@ data class OpenAiIntentResult(
     fun isWorkflowAction(): Boolean = action == "workflow" && !workflowId.isNullOrBlank()
 
     fun isSpeakOnly(): Boolean = action == "speak" && !speak.isNullOrBlank()
+
+    fun isRememberAction(): Boolean = action == "remember" &&
+        (!parameters["fact_key"].isNullOrBlank() || !parameters["key"].isNullOrBlank())
 }

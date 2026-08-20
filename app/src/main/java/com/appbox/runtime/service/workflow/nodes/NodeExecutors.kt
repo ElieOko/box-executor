@@ -296,6 +296,93 @@ class PublishEventNodeExecutor(
     }
 }
 
+class UiReadScreenNodeExecutor : WorkflowNodeExecutor {
+    override val type = WorkflowNodeType.UI_READ_SCREEN
+
+    override suspend fun execute(node: WorkflowNode, context: WorkflowExecutionContext): NodeResult {
+        val maxChars = node.config["maxChars"]?.toIntOrNull() ?: 2500
+        return com.appbox.runtime.accessibility.HoshiAccessibilityService.readActiveScreenText(maxChars)
+            .fold(
+                onSuccess = { text ->
+                    context.variables["screen_text"] = text
+                    context.variables["screen_preview"] = text.lineSequence().take(3).joinToString(". ")
+                    context.log("Écran lu (${text.length} car.)")
+                    NodeResult.Continue
+                },
+                onFailure = { NodeResult.Fail(it.message ?: "Lecture écran échouée") },
+            )
+    }
+}
+
+class UiTapTextNodeExecutor : WorkflowNodeExecutor {
+    override val type = WorkflowNodeType.UI_TAP_TEXT
+
+    override suspend fun execute(node: WorkflowNode, context: WorkflowExecutionContext): NodeResult {
+        val text = context.resolve(node.config["text"] ?: return NodeResult.Fail("text requis"))
+        val partial = node.config["partial"]?.toBooleanStrictOrNull() ?: true
+        return com.appbox.runtime.accessibility.HoshiAccessibilityService.tapByText(text, partial)
+            .fold(
+                onSuccess = {
+                    context.log("Tap UI: $text")
+                    NodeResult.Continue
+                },
+                onFailure = { NodeResult.Fail(it.message ?: "Tap échoué") },
+            )
+    }
+}
+
+class UiGlobalActionNodeExecutor : WorkflowNodeExecutor {
+    override val type = WorkflowNodeType.UI_GLOBAL_ACTION
+
+    override suspend fun execute(node: WorkflowNode, context: WorkflowExecutionContext): NodeResult {
+        val action = node.config["action"] ?: "home"
+        return com.appbox.runtime.accessibility.HoshiAccessibilityService.performGlobalAction(action)
+            .fold(
+                onSuccess = {
+                    context.log("Action globale: $action")
+                    NodeResult.Continue
+                },
+                onFailure = { NodeResult.Fail(it.message ?: "Action globale échouée") },
+            )
+    }
+}
+
+class MemoryWriteNodeExecutor(
+    private val container: RuntimeContainer,
+) : WorkflowNodeExecutor {
+    override val type = WorkflowNodeType.MEMORY_WRITE
+
+    override suspend fun execute(node: WorkflowNode, context: WorkflowExecutionContext): NodeResult {
+        val key = context.resolve(node.config["key"] ?: return NodeResult.Fail("key requis"))
+        val value = context.resolve(node.config["value"] ?: return NodeResult.Fail("value requis"))
+        container.hoshiMemory.rememberFact(key, value)
+        context.variables["memory_key"] = key
+        context.variables["memory_value"] = value
+        context.log("Mémoire: $key = $value")
+        return NodeResult.Continue
+    }
+}
+
+class MemoryReadNodeExecutor(
+    private val container: RuntimeContainer,
+) : WorkflowNodeExecutor {
+    override val type = WorkflowNodeType.MEMORY_READ
+
+    override suspend fun execute(node: WorkflowNode, context: WorkflowExecutionContext): NodeResult {
+        val key = context.resolve(node.config["key"] ?: "")
+        val facts = container.hoshiMemory.getFacts()
+        if (key.isNotBlank()) {
+            val fact = facts[key.lowercase()]
+            context.variables["memory_value"] = fact?.value ?: ""
+            context.log("Mémoire lue: $key")
+        } else {
+            context.variables["memory_all"] = facts.values.joinToString("; ") { "${it.key}=${it.value}" }
+            context.log("Mémoire complète (${facts.size} faits)")
+        }
+        return NodeResult.Continue
+    }
+}
+
 /** Passe-through pour nœuds trigger (déjà activés par le moteur) */
 class PassThroughNodeExecutor(override val type: WorkflowNodeType) : WorkflowNodeExecutor {
     override suspend fun execute(node: WorkflowNode, context: WorkflowExecutionContext): NodeResult {
@@ -329,5 +416,10 @@ fun createNodeExecutors(
         WorkflowNodeType.STORE to StoreNodeExecutor(container),
         WorkflowNodeType.SPEAK to SpeakNodeExecutor(onSpeak),
         WorkflowNodeType.PUBLISH_EVENT to PublishEventNodeExecutor(container),
+        WorkflowNodeType.UI_READ_SCREEN to UiReadScreenNodeExecutor(),
+        WorkflowNodeType.UI_TAP_TEXT to UiTapTextNodeExecutor(),
+        WorkflowNodeType.UI_GLOBAL_ACTION to UiGlobalActionNodeExecutor(),
+        WorkflowNodeType.MEMORY_WRITE to MemoryWriteNodeExecutor(container),
+        WorkflowNodeType.MEMORY_READ to MemoryReadNodeExecutor(container),
     )
 }

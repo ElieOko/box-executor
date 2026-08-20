@@ -46,9 +46,7 @@ class HoshiAccessibilityService : AccessibilityService() {
         )
 
         suspend fun sendWhatsAppMessage(timeoutMs: Long = 20_000): Result<Unit> = runCatching {
-            val service = instance ?: throw IllegalStateException(
-                "Activez HOSHI dans Paramètres → Accessibilité pour l'envoi automatique WhatsApp",
-            )
+            val service = requireService()
             val deadline = System.currentTimeMillis() + timeoutMs
             var lastError = "Bouton envoyer introuvable"
             while (System.currentTimeMillis() < deadline) {
@@ -58,6 +56,101 @@ class HoshiAccessibilityService : AccessibilityService() {
                 delay(600)
             }
             throw IllegalStateException(lastError)
+        }
+
+        suspend fun readActiveScreenText(maxChars: Int = 2500): Result<String> = runCatching {
+            requireService().collectScreenText(maxChars)
+        }
+
+        suspend fun tapByText(text: String, partialMatch: Boolean = true): Result<Unit> = runCatching {
+            val service = requireService()
+            val root = service.rootInActiveWindow ?: throw IllegalStateException("Écran inaccessible")
+            try {
+                val node = service.findTapTarget(root, text, partialMatch)
+                    ?: throw IllegalStateException("Élément « $text » introuvable")
+                service.clickNode(node)
+            } finally {
+                @Suppress("DEPRECATION")
+                root.recycle()
+            }
+        }
+
+        fun performGlobalAction(action: String): Result<Unit> = runCatching {
+            val service = requireService()
+            val globalAction = when (action.lowercase()) {
+                "home", "accueil" -> GLOBAL_ACTION_HOME
+                "back", "retour" -> GLOBAL_ACTION_BACK
+                "recents", "applications" -> GLOBAL_ACTION_RECENTS
+                "notifications" -> GLOBAL_ACTION_NOTIFICATIONS
+                else -> throw IllegalArgumentException("Action inconnue: $action")
+            }
+            if (!service.performGlobalAction(globalAction)) {
+                throw IllegalStateException("Action globale échouée: $action")
+            }
+        }
+
+        private fun requireService(): HoshiAccessibilityService =
+            instance ?: throw IllegalStateException(
+                "Activez HOSHI dans Paramètres → Accessibilité pour le contrôle UI",
+            )
+    }
+
+    private fun collectScreenText(maxChars: Int): String {
+        val root = rootInActiveWindow ?: throw IllegalStateException("Écran inaccessible")
+        return try {
+            val builder = StringBuilder()
+            collectTextRecursive(root, builder, maxChars)
+            builder.toString().trim().ifBlank { "Écran sans texte lisible." }
+        } finally {
+            @Suppress("DEPRECATION")
+            root.recycle()
+        }
+    }
+
+    private fun collectTextRecursive(node: AccessibilityNodeInfo, out: StringBuilder, maxChars: Int) {
+        if (out.length >= maxChars) return
+        node.text?.toString()?.trim()?.takeIf { it.isNotBlank() }?.let { text ->
+            if (out.isNotEmpty()) out.append('\n')
+            out.append(text)
+        }
+        node.contentDescription?.toString()?.trim()?.takeIf { it.isNotBlank() }?.let { desc ->
+            if (out.isNotEmpty()) out.append('\n')
+            out.append(desc)
+        }
+        for (i in 0 until node.childCount) {
+            if (out.length >= maxChars) break
+            val child = node.getChild(i) ?: continue
+            collectTextRecursive(child, out, maxChars)
+        }
+    }
+
+    private fun findTapTarget(root: AccessibilityNodeInfo, text: String, partial: Boolean): AccessibilityNodeInfo? {
+        val needle = text.lowercase()
+        findNodeRecursive(root) { node ->
+            if (!node.isClickable || !node.isEnabled) return@findNodeRecursive false
+            val label = listOfNotNull(
+                node.text?.toString(),
+                node.contentDescription?.toString(),
+            ).joinToString(" ").lowercase()
+            if (partial) label.contains(needle) else label == needle
+        }?.let { return it }
+
+        val nodes = root.findAccessibilityNodeInfosByText(text)
+        return nodes?.firstOrNull { it.isClickable && it.isEnabled }
+    }
+
+    private fun clickNode(node: AccessibilityNodeInfo) {
+        val clicked = node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+        if (!clicked && Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            val rect = Rect()
+            node.getBoundsInScreen(rect)
+            if (rect.width() > 0 && rect.height() > 0) {
+                tap(rect.centerX().toFloat(), rect.centerY().toFloat())
+            } else {
+                throw IllegalStateException("Zone cliquable invalide")
+            }
+        } else if (!clicked) {
+            throw IllegalStateException("Impossible de cliquer")
         }
     }
 
