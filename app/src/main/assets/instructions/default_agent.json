@@ -135,7 +135,7 @@
       {
         "id": "voice_launch_yvent",
         "name": "Lancer Yvent",
-        "description": "Ouvre com.yvent.app dans la box AppBox",
+        "description": "Ouvre com.yvent.app sur l'appareil",
         "enabled": true,
         "nodes": [
           {
@@ -153,7 +153,7 @@
             "config": {
               "packageName": "com.yvent.app",
               "displayName": "Yvent",
-              "inBox": "true"
+              "inBox": "false"
             },
             "positionX": 320,
             "positionY": 500
@@ -162,7 +162,7 @@
             "id": "n2",
             "type": "SPEAK",
             "label": "Confirmation",
-            "config": { "text": "J'ouvre Yvent dans la box, {{user_title}}." },
+            "config": { "text": "J'ouvre Yvent, {{user_title}}." },
             "positionX": 580,
             "positionY": 500
           }
@@ -358,7 +358,7 @@
       {
         "id": "launch_appbox_catalog",
         "name": "Ouvrir app catalogue AppBox",
-        "description": "Lance une app ajoutée dans l'UI AppBox par son nom — priorité catalogue",
+        "description": "Lance une app ajoutée dans l'UI AppBox par son nom — ouverture système",
         "enabled": true,
         "nodes": [
           {
@@ -382,7 +382,7 @@
             "type": "SPEAK",
             "label": "Confirmé",
             "config": {
-              "text": "J'ouvre {{app_name}} dans la box, {{user_title}}."
+              "text": "J'ouvre {{app_name}}, {{user_title}}."
             },
             "positionX": 560,
             "positionY": 1500

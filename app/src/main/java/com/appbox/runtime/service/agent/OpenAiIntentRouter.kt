@@ -126,7 +126,7 @@ class OpenAiIntentRouter(
             Applications installées:
             $installedAppsContext
 
-            Apps AppBox (catalogue UI — priorité, lancer dans la box):
+            Apps AppBox (catalogue UI — recherche par nom, ouverture système par défaut):
             $catalogAppsContext
 
             Groupes contacts WhatsApp:
@@ -152,7 +152,7 @@ class OpenAiIntentRouter(
 
             Règles:
             - whatsapp_group_broadcast: params contact_group_id, message_hint
-            - launch_appbox_catalog / launch_any_app: params app_name (catalogue AppBox prioritaire)
+            - launch_appbox_catalog / launch_any_app: params app_name (catalogue AppBox puis système, ouverture normale)
             - open_system_app: params app_target (settings, wifi)
             - platform_status_check: statut CasaNayo, Vehnix Auto, Barua
             - hn_daily_digest: actualités Hacker News temps réel (API Firebase)
