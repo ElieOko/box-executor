@@ -147,6 +147,21 @@ fun OsShell(
                         onRequestUsageAccess = viewModel::openUsageAccessSettings,
                         onRequestOverlay = viewModel::openOverlaySettings,
                     )
+                    OsScreen.AGENT -> AgentScreen(
+                        agentState = uiState.agentState,
+                        workflows = uiState.workflows,
+                        selectedWorkflow = uiState.selectedWorkflow,
+                        schedules = uiState.schedules,
+                        runs = uiState.workflowRuns,
+                        logs = uiState.agentLogs,
+                        isListening = uiState.isVoiceListening,
+                        lastVoiceText = uiState.lastVoiceText,
+                        onSelectWorkflow = viewModel::selectWorkflow,
+                        onRunWorkflow = viewModel::runWorkflow,
+                        onStartVoice = viewModel::startVoiceListening,
+                        onStopVoice = viewModel::stopVoiceListening,
+                        onReloadInstructions = viewModel::reloadAgentInstructions,
+                    )
                     OsScreen.APP_PICKER -> AppPickerScreen(
                         candidates = viewModel.filteredCandidates(),
                         query = uiState.appPickerQuery,
@@ -191,6 +206,7 @@ private fun AppBoxHeader(screen: OsScreen, appCount: Int, processCount: Int) {
         OsScreen.LIBRARY -> "Bibliothèque"
         OsScreen.PERMISSIONS -> "Contrôle d'accès"
         OsScreen.MONITOR -> "Processus"
+        OsScreen.AGENT -> "Agent"
         OsScreen.APP_PICKER -> "Ajouter"
     }
 
@@ -238,6 +254,7 @@ private fun AppBoxTabBar(current: OsScreen, onNavigate: (OsScreen) -> Unit) {
     val tabs = listOf(
         OsScreen.HOME to "Accueil",
         OsScreen.LIBRARY to "Apps",
+        OsScreen.AGENT to "Agent",
         OsScreen.PERMISSIONS to "Accès",
         OsScreen.MONITOR to "Proc.",
     )
