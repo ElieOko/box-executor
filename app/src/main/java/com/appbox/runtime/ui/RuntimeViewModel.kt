@@ -1,22 +1,25 @@
 package com.appbox.runtime.ui
 
+import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.provider.Settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.appbox.runtime.container.AppBoxSessionActivity
+import com.appbox.runtime.container.LockTaskManager
 import com.appbox.runtime.container.ProcessTracker
+import com.appbox.runtime.service.ProcessWatchdogService
+import com.appbox.runtime.service.ReturnOverlayService
+import com.appbox.runtime.service.RuntimeContainer
+import com.appbox.runtime.service.manager.AppRegistry
+import com.appbox.runtime.service.manager.InstalledAppCandidate
+import com.appbox.runtime.service.manager.InstalledAppScanner
 import com.appbox.runtime.core.model.AppBoxApp
 import com.appbox.runtime.core.model.AppLifecycleState
 import com.appbox.runtime.core.model.RemoteMonitorEvent
 import com.appbox.runtime.core.model.RuntimePermission
 import com.appbox.runtime.core.model.TrackedProcess
-import com.appbox.runtime.service.ProcessWatchdogService
-import com.appbox.runtime.service.RuntimeContainer
-import com.appbox.runtime.service.manager.AppRegistry
-import com.appbox.runtime.service.manager.InstalledAppCandidate
-import com.appbox.runtime.service.manager.InstalledAppScanner
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -39,6 +42,10 @@ data class RuntimeUiState(
     val monitorEvents: List<RemoteMonitorEvent> = emptyList(),
     val trackedProcesses: List<TrackedProcess> = emptyList(),
     val hasUsageAccess: Boolean = false,
+    val canDrawOverlay: Boolean = false,
+    val isLockTaskActive: Boolean = false,
+    val isDeviceOwner: Boolean = false,
+    val environmentActive: Boolean = true,
     val currentScreen: OsScreen = OsScreen.HOME,
     val appPermissions: Set<RuntimePermission> = emptySet(),
     val isLoadingPicker: Boolean = false,
@@ -60,9 +67,48 @@ class RuntimeViewModel(
 
     init {
         refreshApps()
+        refreshEnvironmentState()
         observeMonitorEvents()
         observeProcesses()
-        refreshUsageAccess()
+    }
+
+    fun refreshEnvironmentState() {
+        _uiState.update {
+            it.copy(
+                hasUsageAccess = processTracker.hasUsageAccess(),
+                canDrawOverlay = ReturnOverlayService.canDrawOverlays(appContext),
+                isLockTaskActive = LockTaskManager.isInLockTask(appContext),
+                isDeviceOwner = LockTaskManager.isDeviceOwner(appContext),
+            )
+        }
+    }
+
+    fun enterEnvironment(activity: Activity) {
+        LockTaskManager.enterLockTask(activity)
+        LockTaskManager.syncWhitelist(
+            activity,
+            _uiState.value.apps.map { it.packageName },
+        )
+        ProcessWatchdogService.start(activity)
+        _uiState.update { it.copy(environmentActive = true, isLockTaskActive = true) }
+        refreshEnvironmentState()
+    }
+
+    fun exitEnvironment(activity: Activity) {
+        LockTaskManager.exitLockTask(activity)
+        ReturnOverlayService.hide(appContext)
+        _uiState.update { it.copy(environmentActive = false, isLockTaskActive = false) }
+        refreshEnvironmentState()
+    }
+
+    fun openUsageAccessSettings() {
+        appContext.startActivity(
+            Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+    }
+
+    fun openOverlaySettings() {
+        ReturnOverlayService.openOverlaySettings(appContext)
     }
 
     fun refreshApps() {
@@ -79,6 +125,7 @@ class RuntimeViewModel(
                 )
             }
             selected?.let { loadPermissions(it.packageName) }
+            LockTaskManager.syncWhitelist(appContext, apps.map { it.packageName })
         }
     }
 
@@ -144,14 +191,6 @@ class RuntimeViewModel(
             container.lifecycleManager.recordHeartbeat(packageName)
             refreshApps()
         }
-    }
-
-    fun openUsageAccessSettings() {
-        appContext.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-    }
-
-    fun refreshUsageAccess() {
-        _uiState.update { it.copy(hasUsageAccess = processTracker.hasUsageAccess()) }
     }
 
     fun selectApp(app: AppBoxApp?) {

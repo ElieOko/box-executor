@@ -1,3 +1,7 @@
 <resources>
     <string name="app_name">AppBox Runtime</string>
+    <string name="return_to_appbox">Retourner à AppBox</string>
+    <string name="exit_environment_title">Quitter l\'environnement AppBox</string>
+    <string name="exit_environment_message">Vous sortirez du mode kiosque AppBox. Les barres système Android réapparaîtront.</string>
+    <string name="exit_confirm">Quitter</string>
 </resources>

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:padding="8dp">
+
+    <ImageButton
+        android:id="@+id/btn_return_appbox"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:background="@drawable/bg_overlay_exit"
+        android:contentDescription="@string/return_to_appbox"
+        android:padding="12dp"
+        android:scaleType="fitCenter"
+        android:src="@drawable/ic_exit_appbox" />
+
+</FrameLayout>

@@ -83,9 +83,11 @@ class ProcessTracker(
         return mode == android.app.AppOpsManager.MODE_ALLOWED
     }
 
-    fun usageAccessIntent() = Settings.ACTION_USAGE_ACCESS_SETTINGS
+    fun openUsageAccessIntent() = Settings.ACTION_USAGE_ACCESS_SETTINGS
 
-    private fun getForegroundPackage(): String? {
+    fun getForegroundPackage(): String? = getForegroundPackageInternal()
+
+    private fun getForegroundPackageInternal(): String? {
         if (!hasUsageAccess()) return null
         val usageStatsManager = context.getSystemService(UsageStatsManager::class.java)
         val end = System.currentTimeMillis()

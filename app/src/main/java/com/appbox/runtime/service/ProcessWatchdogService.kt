@@ -7,6 +7,7 @@ import android.content.Intent
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import com.appbox.runtime.AppBoxRuntimeApplication
+import com.appbox.runtime.container.LockTaskManager
 import com.appbox.runtime.container.ProcessTracker
 import com.appbox.runtime.core.model.TrackedProcess
 import kotlinx.coroutines.CoroutineScope
@@ -49,6 +50,11 @@ class ProcessWatchdogService : Service() {
             val tracked = processTracker.scanRegisteredProcesses(registered)
             _processes.value = tracked
             updateNotification(tracked)
+
+            val allowedPackages = listOf(packageName) + apps.map { it.packageName }
+            LockTaskManager.syncWhitelist(this@ProcessWatchdogService, apps.map { it.packageName })
+            ReturnOverlayService.update(this@ProcessWatchdogService, allowedPackages)
+
             delay(POLL_INTERVAL_MS)
         }
     }
