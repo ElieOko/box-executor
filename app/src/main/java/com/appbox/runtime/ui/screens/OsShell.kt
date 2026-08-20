@@ -148,6 +148,7 @@ fun OsShell(
                         onRequestOverlay = viewModel::openOverlaySettings,
                     )
                     OsScreen.AGENT -> AgentScreen(
+                        agentState = uiState.agentState,
                         lastVoiceText = uiState.lastVoiceText,
                         conversationTurns = uiState.conversationTurns,
                         hoshiConfig = uiState.hoshiConfig,

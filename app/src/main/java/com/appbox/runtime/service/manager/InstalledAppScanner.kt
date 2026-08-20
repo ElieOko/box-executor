@@ -51,6 +51,16 @@ class InstalledAppScanner(
 
     fun createLaunchIntent(packageName: String): Intent? {
         val pm = context.packageManager
-        return pm.getLaunchIntentForPackage(packageName)?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        pm.getLaunchIntentForPackage(packageName)?.let {
+            return it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        val launcher = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER).setPackage(packageName)
+        val activities = pm.queryIntentActivities(launcher, PackageManager.MATCH_DEFAULT_ONLY)
+        val resolveInfo = activities.firstOrNull() ?: return null
+        return Intent(Intent.ACTION_MAIN).apply {
+            addCategory(Intent.CATEGORY_LAUNCHER)
+            setClassName(resolveInfo.activityInfo.packageName, resolveInfo.activityInfo.name)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
     }
 }

@@ -14,9 +14,16 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -24,8 +31,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.appbox.runtime.core.model.ConversationTurn
 import com.appbox.runtime.core.model.AgentLogEntry
+import com.appbox.runtime.core.model.AgentState
+import com.appbox.runtime.core.model.AgentStatus
+import com.appbox.runtime.core.model.ConversationTurn
 import com.appbox.runtime.core.model.HoshiUserConfig
 import com.appbox.runtime.core.model.ScheduleTriggerType
 import com.appbox.runtime.core.model.ScheduledTask
@@ -39,6 +48,7 @@ import java.util.Locale
 
 @Composable
 fun AgentScreen(
+    agentState: AgentState,
     lastVoiceText: String?,
     conversationTurns: List<ConversationTurn>,
     hoshiConfig: HoshiUserConfig,
@@ -54,108 +64,134 @@ fun AgentScreen(
     onSaveConfig: () -> Unit,
     onOpenAccessibility: () -> Unit,
 ) {
+    var selectedTab by remember { mutableIntStateOf(0) }
+
     Column(modifier = Modifier.fillMaxSize()) {
         AppBoxPanel(cornerRadius = 14.dp, modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(14.dp)) {
                 Text("HOSHI", color = AppBoxThemeColors.Accent, fontWeight = FontWeight.Bold, fontSize = 22.sp)
                 Text(
                     if (hoshiConfig.jarvisMode) {
-                        "Mode JARVIS — écoute permanente, mémoire, briefing matinal, contrôle UI"
+                        "Assistant JARVIS — conversation, flows, exécution catalogue"
                     } else {
                         "Écoute active — dites « HOSHI » puis votre commande"
                     },
                     color = AppBoxThemeColors.TextSecondary,
                     fontSize = 12.sp,
                 )
-                Spacer(modifier = Modifier.height(8.dp))
-                AppBoxPanel(cornerRadius = 8.dp, modifier = Modifier.clickable(onClick = onReloadInstructions)) {
-                    Text(
-                        "Recharger les instructions",
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                        color = AppBoxThemeColors.Accent,
-                        fontSize = 12.sp,
-                    )
-                }
             }
         }
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .verticalScroll(rememberScrollState()),
+        TabRow(
+            selectedTabIndex = selectedTab,
+            containerColor = AppBoxThemeColors.Surface,
+            contentColor = AppBoxThemeColors.Accent,
         ) {
-            HoshiConfigPanel(
-                config = hoshiConfig,
-                openAiKeyConfigured = openAiKeyConfigured,
-                accessibilityEnabled = accessibilityEnabled,
-                contactGroups = contactGroups,
-                onContactGroupsChange = onContactGroupsChange,
-                onConfigChange = onConfigChange,
-                onSave = onSaveConfig,
-                onOpenAccessibility = onOpenAccessibility,
-            )
+            Tab(selected = selectedTab == 0, onClick = { selectedTab = 0 }, text = { Text("Conversation") })
+            Tab(selected = selectedTab == 1, onClick = { selectedTab = 1 }, text = { Text("Configuration") })
+            Tab(selected = selectedTab == 2, onClick = { selectedTab = 2 }, text = { Text("Activité") })
         }
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        HoshiStatusFooter(schedules, runs, logs, lastVoiceText, conversationTurns, accessibilityEnabled)
+        when (selectedTab) {
+            0 -> HoshiConversationPanel(
+                conversationTurns = conversationTurns,
+                lastVoiceText = lastVoiceText,
+                agentStatus = agentState.status,
+                jarvisMode = hoshiConfig.jarvisMode,
+                modifier = Modifier.weight(1f),
+            )
+            1 -> Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState()),
+            ) {
+                AppBoxPanel(cornerRadius = 8.dp, modifier = Modifier.fillMaxWidth().clickable(onClick = onReloadInstructions)) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(Icons.Default.Settings, null, tint = AppBoxThemeColors.Accent, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Recharger les instructions", color = AppBoxThemeColors.Accent, fontSize = 12.sp)
+                    }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                HoshiConfigPanel(
+                    config = hoshiConfig,
+                    openAiKeyConfigured = openAiKeyConfigured,
+                    accessibilityEnabled = accessibilityEnabled,
+                    contactGroups = contactGroups,
+                    onContactGroupsChange = onContactGroupsChange,
+                    onConfigChange = onConfigChange,
+                    onSave = onSaveConfig,
+                    onOpenAccessibility = onOpenAccessibility,
+                )
+            }
+            2 -> ActivityTab(
+                schedules = schedules,
+                runs = runs,
+                logs = logs,
+                accessibilityEnabled = accessibilityEnabled,
+                modifier = Modifier.weight(1f),
+            )
+        }
     }
 }
 
 @Composable
-private fun HoshiStatusFooter(
+private fun ActivityTab(
     schedules: List<ScheduledTask>,
     runs: List<WorkflowRun>,
     logs: List<AgentLogEntry>,
-    lastVoiceText: String?,
-    conversationTurns: List<ConversationTurn>,
     accessibilityEnabled: Boolean,
+    modifier: Modifier = Modifier,
 ) {
-    AppBoxPanel(cornerRadius = 14.dp, modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            Text(
-                if (accessibilityEnabled) "JARVIS UI : contrôle écran activé" else "JARVIS UI : activez Accessibilité HOSHI",
-                color = if (accessibilityEnabled) Color(0xFF48BB78) else AppBoxThemeColors.Accent,
-                fontSize = 11.sp,
-            )
-            lastVoiceText?.let {
-                Spacer(modifier = Modifier.height(4.dp))
-                Text("Entendu : \"$it\"", color = AppBoxThemeColors.TextSecondary, fontSize = 11.sp)
-            }
-            if (conversationTurns.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(6.dp))
-                Text("Conversation", color = AppBoxThemeColors.TextPrimary, fontSize = 11.sp, fontWeight = FontWeight.Medium)
-                conversationTurns.takeLast(4).forEach { turn ->
-                    val prefix = if (turn.role == "assistant") "HOSHI" else "Vous"
+    Column(
+        modifier = modifier
+            .verticalScroll(rememberScrollState())
+            .padding(bottom = 8.dp),
+    ) {
+        AppBoxPanel(cornerRadius = 14.dp, modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(12.dp)) {
+                Text(
+                    if (accessibilityEnabled) "JARVIS UI : contrôle écran activé" else "JARVIS UI : activez Accessibilité HOSHI",
+                    color = if (accessibilityEnabled) Color(0xFF48BB78) else AppBoxThemeColors.Accent,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text("Planifications", color = AppBoxThemeColors.TextPrimary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                schedules.forEach { task ->
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 4.dp)) {
+                        Icon(Icons.Default.Schedule, null, tint = AppBoxThemeColors.TextTertiary, modifier = Modifier.size(14.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("${task.name} · ${formatSchedule(task)}", color = AppBoxThemeColors.TextPrimary, fontSize = 11.sp)
+                    }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Text("Dernières exécutions", color = AppBoxThemeColors.TextPrimary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                runs.takeLast(5).reversed().forEach { run ->
+                    val color = when (run.status) {
+                        WorkflowRunStatus.COMPLETED -> Color(0xFF48BB78)
+                        WorkflowRunStatus.FAILED -> Color(0xFFFC8181)
+                        else -> AppBoxThemeColors.TextTertiary
+                    }
                     Text(
-                        "$prefix : ${turn.text}",
-                        color = if (turn.role == "assistant") AppBoxThemeColors.Accent else AppBoxThemeColors.TextSecondary,
-                        fontSize = 10.sp,
-                        maxLines = 2,
+                        "${run.workflowId} — ${run.status.name}",
+                        color = color,
+                        fontSize = 11.sp,
+                        maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(vertical = 2.dp),
                     )
                 }
-            }
-            Spacer(modifier = Modifier.height(6.dp))
-            schedules.take(2).forEach { task ->
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Schedule, null, tint = AppBoxThemeColors.TextTertiary, modifier = Modifier.size(14.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("${task.name} · ${formatSchedule(task)}", color = AppBoxThemeColors.TextPrimary, fontSize = 11.sp)
+                logs.takeLast(3).forEach {
+                    Text(it.message, color = AppBoxThemeColors.TextTertiary, fontSize = 10.sp, maxLines = 2)
                 }
-            }
-            runs.takeLast(1).forEach { run ->
-                val color = when (run.status) {
-                    WorkflowRunStatus.COMPLETED -> Color(0xFF48BB78)
-                    WorkflowRunStatus.FAILED -> Color(0xFFFC8181)
-                    else -> AppBoxThemeColors.TextTertiary
-                }
-                Text("${run.workflowId} — ${run.status.name}", color = color, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
-            logs.takeLast(1).forEach {
-                Text(it.message, color = AppBoxThemeColors.TextTertiary, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
     }
