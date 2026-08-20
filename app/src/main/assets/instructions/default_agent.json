@@ -1,8 +1,8 @@
 {
-  "version": 3,
+  "version": 4,
   "agent": {
     "name": "HOSHI",
-    "description": "Assistant JARVIS autonome — correction vocale, OpenAI robuste, catalogue AppBox, overlay déplaçable",
+    "description": "Assistant JARVIS autonome — HN temps réel (Firebase API), plateformes CasaNayo/Vehnix/Barua, overlay déplaçable",
     "workflows": [
       {
         "id": "whatsapp_scheduled_send",
@@ -64,7 +64,7 @@
       {
         "id": "hn_daily_digest",
         "name": "Digest Hacker News",
-        "description": "Actualités traduites EN→FR depuis https://news.ycombinator.com/",
+        "description": "Actualités temps réel via API Firebase Hacker News, traduites EN→FR",
         "enabled": true,
         "nodes": [
           {
@@ -76,11 +76,19 @@
             "positionY": 300
           },
           {
+            "id": "n0",
+            "type": "PLATFORM_STATUS_CHECK",
+            "label": "Statut plateformes",
+            "config": {},
+            "positionX": 170,
+            "positionY": 300
+          },
+          {
             "id": "n1",
             "type": "HTTP_FETCH",
-            "label": "Page HN",
+            "label": "API HN temps réel",
             "config": {
-              "url": "https://news.ycombinator.com/",
+              "url": "https://hacker-news.firebaseio.com/v0/topstories.json",
               "method": "GET"
             },
             "positionX": 280,
@@ -100,7 +108,7 @@
             "label": "Notification",
             "config": {
               "title": "HOSHI · Hacker News {{date}}",
-              "body": "{{digest}}"
+              "body": "{{platform_status_short}}\n\n{{digest}}"
             },
             "positionX": 720,
             "positionY": 300
@@ -110,14 +118,15 @@
             "type": "SPEAK",
             "label": "Lecture HOSHI",
             "config": {
-              "text": "Voici l'actualité Hacker News, {{user_title}}. {{digest_short}}"
+              "text": "{{user_title}}, {{platform_status_short}} Voici l'actualité Hacker News en temps réel. {{digest_short}}"
             },
             "positionX": 940,
             "positionY": 300
           }
         ],
         "edges": [
-          { "id": "e1", "fromNodeId": "t1", "toNodeId": "n1" },
+          { "id": "e1", "fromNodeId": "t1", "toNodeId": "n0" },
+          { "id": "e1b", "fromNodeId": "n0", "toNodeId": "n1" },
           { "id": "e2", "fromNodeId": "n1", "toNodeId": "n2" },
           { "id": "e3", "fromNodeId": "n2", "toNodeId": "n3" },
           { "id": "e4", "fromNodeId": "n3", "toNodeId": "n4" }
@@ -178,10 +187,21 @@
             "positionY": 700
           },
           {
+            "id": "n0",
+            "type": "PLATFORM_STATUS_CHECK",
+            "label": "CasaNayo · Vehnix · Barua",
+            "config": {},
+            "positionX": 170,
+            "positionY": 700
+          },
+          {
             "id": "n1",
             "type": "HTTP_FETCH",
-            "label": "Actualités",
-            "config": { "url": "https://news.ycombinator.com/", "method": "GET" },
+            "label": "API HN temps réel",
+            "config": {
+              "url": "https://hacker-news.firebaseio.com/v0/topstories.json",
+              "method": "GET"
+            },
             "positionX": 280,
             "positionY": 700
           },
@@ -199,7 +219,7 @@
             "label": "Notification briefing",
             "config": {
               "title": "Briefing HOSHI · {{date}}",
-              "body": "{{digest_short}}"
+              "body": "{{platform_status_short}}\n\n{{digest_short}}"
             },
             "positionX": 720,
             "positionY": 700
@@ -209,14 +229,15 @@
             "type": "SPEAK",
             "label": "Briefing vocal",
             "config": {
-              "text": "Bonjour {{user_title}}. Voici votre briefing matinal. {{digest_short}}"
+              "text": "Bonjour {{user_title}}. {{system_status_message}}. {{platform_status_short}} Actualités Hacker News en temps réel. {{digest_short}}"
             },
             "positionX": 940,
             "positionY": 700
           }
         ],
         "edges": [
-          { "id": "e1", "fromNodeId": "t1", "toNodeId": "n1" },
+          { "id": "e1", "fromNodeId": "t1", "toNodeId": "n0" },
+          { "id": "e1b", "fromNodeId": "n0", "toNodeId": "n1" },
           { "id": "e2", "fromNodeId": "n1", "toNodeId": "n2" },
           { "id": "e3", "fromNodeId": "n2", "toNodeId": "n3" },
           { "id": "e4", "fromNodeId": "n3", "toNodeId": "n4" }
@@ -373,6 +394,56 @@
         ]
       },
       {
+        "id": "platform_status_check",
+        "name": "Statut plateformes",
+        "description": "Vérifie CasaNayo, Vehnix Auto et Barua Officiel",
+        "enabled": true,
+        "nodes": [
+          {
+            "id": "t1",
+            "type": "TRIGGER_VOICE",
+            "label": "Commande statut",
+            "config": {},
+            "positionX": 60,
+            "positionY": 1900
+          },
+          {
+            "id": "n1",
+            "type": "PLATFORM_STATUS_CHECK",
+            "label": "Vérification HTTP",
+            "config": {},
+            "positionX": 300,
+            "positionY": 1900
+          },
+          {
+            "id": "n2",
+            "type": "NOTIFY",
+            "label": "Notification statut",
+            "config": {
+              "title": "HOSHI · Plateformes",
+              "body": "{{platform_status}}"
+            },
+            "positionX": 540,
+            "positionY": 1900
+          },
+          {
+            "id": "n3",
+            "type": "SPEAK",
+            "label": "Rapport vocal",
+            "config": {
+              "text": "{{user_title}}, {{platform_status_short}}"
+            },
+            "positionX": 780,
+            "positionY": 1900
+          }
+        ],
+        "edges": [
+          { "id": "e1", "fromNodeId": "t1", "toNodeId": "n1" },
+          { "id": "e2", "fromNodeId": "n1", "toNodeId": "n2" },
+          { "id": "e3", "fromNodeId": "n2", "toNodeId": "n3" }
+        ]
+      },
+      {
         "id": "open_system_app",
         "name": "Ouvrir réglages système",
         "description": "Ouvre paramètres, Wi-Fi, Bluetooth ou accessibilité",
@@ -430,7 +501,13 @@
       { "phrase": "ouvre les paramètres", "workflowId": "open_system_app", "parameters": { "app_target": "settings" } },
       { "phrase": "paramètres", "workflowId": "open_system_app", "parameters": { "app_target": "settings" } },
       { "phrase": "wifi", "workflowId": "open_system_app", "parameters": { "app_target": "wifi" } },
-      { "phrase": "accessibilité", "workflowId": "open_system_app", "parameters": { "app_target": "accessibility" } }
+      { "phrase": "accessibilité", "workflowId": "open_system_app", "parameters": { "app_target": "accessibility" } },
+      { "phrase": "statut plateformes", "workflowId": "platform_status_check" },
+      { "phrase": "statut des plateformes", "workflowId": "platform_status_check" },
+      { "phrase": "casanayo", "workflowId": "platform_status_check" },
+      { "phrase": "vehnix", "workflowId": "platform_status_check" },
+      { "phrase": "barua", "workflowId": "platform_status_check" },
+      { "phrase": "les plateformes", "workflowId": "platform_status_check" }
     ],
     "reactiveExpressions": [
       {
@@ -474,6 +551,10 @@
       {
         "patterns": ["lis", "écran", "que vois"],
         "workflowId": "jarvis_read_screen"
+      },
+      {
+        "patterns": ["casanayo", "vehnix", "barua", "plateforme", "plateformes", "statut", "système", "systeme"],
+        "workflowId": "platform_status_check"
       }
     ],
     "eventTriggers": [
@@ -481,7 +562,8 @@
       { "topic": "agent.run", "workflowId": "hn_daily_digest" },
       { "topic": "hoshi.autonomous.briefing", "workflowId": "jarvis_morning_briefing" },
       { "topic": "hoshi.autonomous.digest", "workflowId": "hn_daily_digest" },
-      { "topic": "hoshi.autonomous.whatsapp", "workflowId": "whatsapp_scheduled_send" }
+      { "topic": "hoshi.autonomous.whatsapp", "workflowId": "whatsapp_scheduled_send" },
+      { "topic": "hoshi.autonomous.platforms", "workflowId": "platform_status_check" }
     ]
   }
 }

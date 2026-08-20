@@ -2,12 +2,17 @@ package com.appbox.runtime.service.agent
 
 object JarvisPersona {
 
-    fun startupGreeting(config: com.appbox.runtime.core.model.HoshiUserConfig): String {
+    fun startupGreeting(
+        config: com.appbox.runtime.core.model.HoshiUserConfig,
+        platformStatusShort: String? = null,
+    ): String {
         val title = addressTitle(config)
+        val status = platformStatusShort?.takeIf { it.isNotBlank() }
+            ?: "Tous les systèmes sont opérationnels."
         return if (config.jarvisMode) {
-            "Bonjour $title. Tous les systèmes sont opérationnels. Je suis HOSHI, votre assistant. Que puis-je faire pour vous ?"
+            "Bonjour $title. $status Je suis HOSHI, votre assistant. Que puis-je faire pour vous ?"
         } else {
-            "Bonjour, je suis HOSHI. Je vous écoute."
+            "Bonjour, je suis HOSHI. $status Je vous écoute."
         }
     }
 

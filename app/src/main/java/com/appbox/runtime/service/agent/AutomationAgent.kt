@@ -63,7 +63,9 @@ class AutomationAgent(
         userConfig = preferences.getConfig()
         loadInstructionsFromAssets().getOrThrow()
         applyInstructions(instructions!!).getOrThrow()
-        val greeting = JarvisPersona.startupGreeting(userConfig)
+        val platformReport = PlatformStatusChecker.checkAll()
+        val platformShort = PlatformStatusChecker.formatStatusShort(platformReport)
+        val greeting = JarvisPersona.startupGreeting(userConfig, platformShort)
         speakAndRemember(greeting)
         log(AgentLogLevel.INFO, "HOSHI démarré (mode JARVIS=${userConfig.jarvisMode})")
         com.appbox.runtime.service.overlay.HoshiFloatingOverlayService.show(context)
@@ -243,7 +245,7 @@ class AutomationAgent(
             question = question,
             config = userConfig,
             memoryContext = if (userConfig.memoryEnabled) memory.buildMemoryContext() else "",
-            appsContext = buildAppsContext(),
+            appsContext = buildAppsContext() + " | " + PlatformStatusChecker.platformsContextForLlm(),
         ).fold(
             onSuccess = { answer ->
                 speakAndRemember(answer)

@@ -132,6 +132,12 @@ class OpenAiIntentRouter(
             Groupes contacts WhatsApp:
             $contactGroupsContext
 
+            Plateformes surveillées (CasaNayo, Vehnix Auto, Barua Officiel):
+            ${PlatformStatusChecker.platformsContextForLlm()}
+            Workflow platform_status_check pour vérifier leur disponibilité.
+
+            Actualités temps réel: API Firebase Hacker News (${PlatformStatusChecker.HN_TOP_STORIES_URL}).
+
             Config:
             - WhatsApp: ${config.whatsappPhone}, message: ${config.whatsappMessage}
             - Heure WhatsApp: ${config.whatsappHour}:${"%02d".format(config.whatsappMinute)}
@@ -148,6 +154,8 @@ class OpenAiIntentRouter(
             - whatsapp_group_broadcast: params contact_group_id, message_hint
             - launch_appbox_catalog / launch_any_app: params app_name (catalogue AppBox prioritaire)
             - open_system_app: params app_target (settings, wifi)
+            - platform_status_check: statut CasaNayo, Vehnix Auto, Barua
+            - hn_daily_digest: actualités Hacker News temps réel (API Firebase)
             - speak: conversation et questions tech détaillées
             - remember: fact_key, fact_value
         """.trimIndent()

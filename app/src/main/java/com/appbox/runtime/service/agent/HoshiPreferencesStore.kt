@@ -164,7 +164,7 @@ class HoshiPreferencesStore(private val context: Context) {
                     if (node.type == WorkflowNodeType.HTTP_FETCH) {
                         node.copy(
                             config = node.config + mapOf(
-                                "url" to "https://news.ycombinator.com/",
+                                "url" to PlatformStatusChecker.HN_TOP_STORIES_URL,
                                 "method" to "GET",
                             ),
                         )
@@ -176,12 +176,12 @@ class HoshiPreferencesStore(private val context: Context) {
                     when (node.type) {
                         WorkflowNodeType.SPEAK -> node.copy(
                             config = node.config + mapOf(
-                                "text" to "Bonjour {{user_title}}. Briefing matinal. {{digest_short}}",
+                                "text" to "Bonjour {{user_title}}. {{system_status_message}}. {{platform_status_short}} Actualités Hacker News en temps réel. {{digest_short}}",
                             ),
                         )
                         WorkflowNodeType.HTTP_FETCH -> node.copy(
                             config = node.config + mapOf(
-                                "url" to "https://news.ycombinator.com/",
+                                "url" to PlatformStatusChecker.HN_TOP_STORIES_URL,
                                 "method" to "GET",
                             ),
                         )
