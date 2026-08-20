@@ -14,6 +14,7 @@ enum class WorkflowNodeType {
     LAUNCH_APP,
     WHATSAPP_PREPARE,
     WHATSAPP_OPEN,
+    WHATSAPP_SEND_ACCESSIBILITY,
     DELAY,
     CONDITION,
     STORE,

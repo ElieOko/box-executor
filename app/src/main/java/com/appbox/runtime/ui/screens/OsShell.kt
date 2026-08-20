@@ -156,11 +156,23 @@ fun OsShell(
                         logs = uiState.agentLogs,
                         isListening = uiState.isVoiceListening,
                         lastVoiceText = uiState.lastVoiceText,
+                        hoshiConfig = uiState.hoshiConfig,
+                        workflowEditMode = uiState.workflowEditMode,
+                        accessibilityEnabled = uiState.accessibilityEnabled,
+                        agentTab = uiState.hoshiAgentTab,
                         onSelectWorkflow = viewModel::selectWorkflow,
                         onRunWorkflow = viewModel::runWorkflow,
-                        onStartVoice = viewModel::startVoiceListening,
-                        onStopVoice = viewModel::stopVoiceListening,
+                        onToggleVoice = {
+                            if (uiState.isVoiceListening) viewModel.stopVoiceListening()
+                            else viewModel.startVoiceListening()
+                        },
                         onReloadInstructions = viewModel::reloadAgentInstructions,
+                        onConfigChange = viewModel::updateHoshiConfig,
+                        onSaveConfig = viewModel::saveHoshiConfig,
+                        onOpenAccessibility = viewModel::openAccessibilitySettings,
+                        onTabChange = viewModel::setHoshiAgentTab,
+                        onToggleEditMode = viewModel::toggleWorkflowEditMode,
+                        onNodeMoved = viewModel::onWorkflowNodeMoved,
                     )
                     OsScreen.APP_PICKER -> AppPickerScreen(
                         candidates = viewModel.filteredCandidates(),
@@ -206,7 +218,7 @@ private fun AppBoxHeader(screen: OsScreen, appCount: Int, processCount: Int) {
         OsScreen.LIBRARY -> "Bibliothèque"
         OsScreen.PERMISSIONS -> "Contrôle d'accès"
         OsScreen.MONITOR -> "Processus"
-        OsScreen.AGENT -> "Agent"
+        OsScreen.AGENT -> "HOSHI"
         OsScreen.APP_PICKER -> "Ajouter"
     }
 

@@ -1,13 +1,13 @@
 {
-  "version": 1,
+  "version": 2,
   "agent": {
-    "name": "AppBox Super Agent",
-    "description": "Agent d'automatisation — WhatsApp planifié, digest Hacker News, commandes vocales",
+    "name": "HOSHI",
+    "description": "Agent vocal réactif — WhatsApp planifié, digest Hacker News, automatisation UI",
     "workflows": [
       {
         "id": "whatsapp_scheduled_send",
-        "name": "WhatsApp message planifié",
-        "description": "Ouvre WhatsApp avec un message pré-rempli à l'heure indiquée",
+        "name": "WhatsApp planifié HOSHI",
+        "description": "Ouvre WhatsApp et envoie votre message à l'heure configurée",
         "enabled": true,
         "nodes": [
           {
@@ -15,97 +15,105 @@
             "type": "TRIGGER_SCHEDULE",
             "label": "Déclencheur horaire",
             "config": { "scheduleId": "whatsapp_daily" },
-            "positionX": 80,
-            "positionY": 120
+            "positionX": 60,
+            "positionY": 100
           },
           {
             "id": "n1",
             "type": "WHATSAPP_PREPARE",
-            "label": "Préparer message",
+            "label": "Votre message",
             "config": {
               "phone": "+33600000000",
-              "message": "Bonjour, rappel automatique AppBox — message envoyé à {{time}}"
+              "message": "Message HOSHI à {{time}}"
             },
-            "positionX": 320,
-            "positionY": 120
+            "positionX": 280,
+            "positionY": 100
           },
           {
             "id": "n2",
             "type": "WHATSAPP_OPEN",
             "label": "Ouvrir WhatsApp",
             "config": { "autoSend": "false" },
-            "positionX": 560,
-            "positionY": 120
+            "positionX": 500,
+            "positionY": 100
+          },
+          {
+            "id": "n2b",
+            "type": "WHATSAPP_SEND_ACCESSIBILITY",
+            "label": "Envoi auto UI",
+            "config": { "enabled": "false" },
+            "positionX": 720,
+            "positionY": 100
           },
           {
             "id": "n3",
-            "type": "NOTIFY",
-            "label": "Confirmation",
-            "config": {
-              "title": "WhatsApp",
-              "body": "Conversation ouverte — validez l'envoi dans WhatsApp"
-            },
-            "positionX": 800,
-            "positionY": 120
+            "type": "SPEAK",
+            "label": "Confirmation HOSHI",
+            "config": { "text": "WhatsApp traité." },
+            "positionX": 940,
+            "positionY": 100
           }
         ],
         "edges": [
           { "id": "e1", "fromNodeId": "t1", "toNodeId": "n1" },
           { "id": "e2", "fromNodeId": "n1", "toNodeId": "n2" },
-          { "id": "e3", "fromNodeId": "n2", "toNodeId": "n3" }
+          { "id": "e3", "fromNodeId": "n2", "toNodeId": "n2b" },
+          { "id": "e4", "fromNodeId": "n2b", "toNodeId": "n3" }
         ]
       },
       {
         "id": "hn_daily_digest",
         "name": "Digest Hacker News",
-        "description": "Récupère les titres du front page et envoie une notification quotidienne",
+        "description": "Actualités depuis https://news.ycombinator.com/",
         "enabled": true,
         "nodes": [
           {
             "id": "t1",
             "type": "TRIGGER_SCHEDULE",
-            "label": "Chaque matin 8h",
+            "label": "Planification HN",
             "config": { "scheduleId": "hn_daily" },
-            "positionX": 80,
-            "positionY": 320
+            "positionX": 60,
+            "positionY": 300
           },
           {
             "id": "n1",
             "type": "HTTP_FETCH",
-            "label": "Fetch HN",
+            "label": "Page HN",
             "config": {
-              "url": "https://hacker-news.firebaseio.com/v0/topstories.json",
+              "url": "https://news.ycombinator.com/",
               "method": "GET"
             },
-            "positionX": 320,
-            "positionY": 320
+            "positionX": 280,
+            "positionY": 300
           },
           {
             "id": "n2",
             "type": "PARSE_HN_DIGEST",
             "label": "Top 5 titres",
             "config": { "limit": "5" },
-            "positionX": 560,
-            "positionY": 320
+            "positionX": 500,
+            "positionY": 300
           },
           {
             "id": "n3",
             "type": "NOTIFY",
-            "label": "Notification digest",
+            "label": "Notification",
             "config": {
-              "title": "Hacker News — {{date}}",
+              "title": "HOSHI · Hacker News {{date}}",
               "body": "{{digest}}"
             },
-            "positionX": 800,
-            "positionY": 320
+            "positionX": 720,
+            "positionY": 300
           },
           {
             "id": "n4",
             "type": "SPEAK",
-            "label": "Lecture vocale",
-            "config": { "text": "Digest Hacker News prêt. {{digest_short}}" },
-            "positionX": 1040,
-            "positionY": 320
+            "label": "Lecture HOSHI",
+            "config": {
+              "text": "Voici l'actualité Hacker News. {{digest_short}}"
+            },
+            "positionX": 940,
+            "positionY": 300
           }
         ],
         "edges": [
@@ -117,8 +125,8 @@
       },
       {
         "id": "voice_launch_yvent",
-        "name": "Lancer Yvent (voix)",
-        "description": "Ouvre com.yvent.app dans la box sur commande vocale",
+        "name": "Lancer Yvent",
+        "description": "Ouvre com.yvent.app dans la box",
         "enabled": true,
         "nodes": [
           {
@@ -126,28 +134,28 @@
             "type": "TRIGGER_VOICE",
             "label": "Commande vocale",
             "config": { "phrase": "ouvrir yvent" },
-            "positionX": 80,
-            "positionY": 520
+            "positionX": 60,
+            "positionY": 500
           },
           {
             "id": "n1",
             "type": "LAUNCH_APP",
-            "label": "Lancer Yvent",
+            "label": "Yvent",
             "config": {
               "packageName": "com.yvent.app",
               "displayName": "Yvent",
               "inBox": "true"
             },
-            "positionX": 360,
-            "positionY": 520
+            "positionX": 320,
+            "positionY": 500
           },
           {
             "id": "n2",
             "type": "SPEAK",
             "label": "Confirmation",
-            "config": { "text": "Yvent est en cours d'ouverture" },
-            "positionX": 640,
-            "positionY": 520
+            "config": { "text": "J'ouvre Yvent." },
+            "positionX": 580,
+            "positionY": 500
           }
         ],
         "edges": [
@@ -156,46 +164,47 @@
         ]
       }
     ],
-    "schedules": [
-      {
-        "id": "whatsapp_daily",
-        "name": "WhatsApp quotidien 18h",
-        "workflowId": "whatsapp_scheduled_send",
-        "triggerType": "DAILY_AT",
-        "hour": 18,
-        "minute": 0,
-        "enabled": true
-      },
-      {
-        "id": "hn_daily",
-        "name": "Hacker News 8h",
-        "workflowId": "hn_daily_digest",
-        "triggerType": "DAILY_AT",
-        "hour": 8,
-        "minute": 0,
-        "enabled": true
-      }
-    ],
+    "schedules": [],
     "voiceCommands": [
+      { "phrase": "envoie whatsapp", "workflowId": "whatsapp_scheduled_send", "parameters": { "immediate": "true" } },
+      { "phrase": "envoyer whatsapp", "workflowId": "whatsapp_scheduled_send" },
+      { "phrase": "digest hacker news", "workflowId": "hn_daily_digest" },
+      { "phrase": "actualités", "workflowId": "hn_daily_digest" },
+      { "phrase": "ouvrir yvent", "workflowId": "voice_launch_yvent" }
+    ],
+    "reactiveExpressions": [
       {
-        "phrase": "ouvrir yvent",
-        "workflowId": "voice_launch_yvent"
+        "patterns": ["bonjour", "salut", "coucou"],
+        "response": "Bonjour, je suis HOSHI. Je peux envoyer WhatsApp, lire Hacker News ou ouvrir Yvent."
       },
       {
-        "phrase": "digest hacker news",
+        "patterns": ["comment ça va", "ca va", "comment vas-tu"],
+        "response": "Tout va bien, je suis prête à vous aider."
+      },
+      {
+        "patterns": ["merci", "thanks"],
+        "response": "Avec plaisir."
+      },
+      {
+        "patterns": ["quelle heure", "il est quelle heure"],
+        "response": "Consultez l'heure sur votre écran, ou demandez-moi d'envoyer WhatsApp à une heure précise dans la configuration."
+      },
+      {
+        "patterns": ["hacker news", "hn", "actualité", "actualites"],
         "workflowId": "hn_daily_digest"
       },
       {
-        "phrase": "envoyer whatsapp",
-        "workflowId": "whatsapp_scheduled_send",
-        "parameters": { "immediate": "true" }
+        "patterns": ["whatsapp", "message"],
+        "workflowId": "whatsapp_scheduled_send"
+      },
+      {
+        "patterns": ["yvent", "ouvre l'application"],
+        "workflowId": "voice_launch_yvent"
       }
     ],
     "eventTriggers": [
-      {
-        "topic": "agent.run",
-        "workflowId": "hn_daily_digest"
-      }
+      { "topic": "hoshi.run", "workflowId": "hn_daily_digest" },
+      { "topic": "agent.run", "workflowId": "hn_daily_digest" }
     ]
   }
 }

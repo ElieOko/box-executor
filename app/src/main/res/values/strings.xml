@@ -4,4 +4,5 @@
     <string name="exit_environment_title">Quitter l\'environnement AppBox</string>
     <string name="exit_environment_message">Vous sortirez du mode kiosque AppBox. Les barres système Android réapparaîtront.</string>
     <string name="exit_confirm">Quitter</string>
+    <string name="hoshi_accessibility_description">HOSHI utilise l\'accessibilité pour envoyer automatiquement vos messages WhatsApp planifiés.</string>
 </resources>

@@ -43,7 +43,10 @@ interface SchedulerServiceContract {
 interface VoiceServiceContract {
     fun startListening()
     fun stopListening()
+    fun startContinuousListening()
+    fun stopContinuousListening()
     fun speak(text: String)
+    fun speakAsHoshi(text: String) = speak(text)
     val isListening: Boolean
     val lastTranscript: SharedFlow<String>
 }

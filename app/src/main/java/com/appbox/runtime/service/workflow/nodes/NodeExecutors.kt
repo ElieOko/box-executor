@@ -61,31 +61,48 @@ class ParseHnDigestNodeExecutor : WorkflowNodeExecutor {
     override suspend fun execute(node: WorkflowNode, context: WorkflowExecutionContext): NodeResult =
         withContext(Dispatchers.IO) {
             val limit = node.config["limit"]?.toIntOrNull() ?: 5
-            val idsJson = context.variables["http_body"] ?: return@withContext NodeResult.Fail("Pas de réponse HTTP")
+            val body = context.variables["http_body"] ?: return@withContext NodeResult.Fail("Pas de réponse HTTP")
             runCatching {
-                val ids = JSONArray(idsJson)
-                val titles = mutableListOf<String>()
-                for (i in 0 until minOf(limit, ids.length())) {
-                    val id = ids.getInt(i)
-                    val itemUrl = URL("https://hacker-news.firebaseio.com/v0/item/$id.json")
-                    val conn = itemUrl.openConnection() as HttpURLConnection
-                    try {
-                        val itemBody = conn.inputStream.bufferedReader().readText()
-                        val title = Regex(""""title"\s*:\s*"([^"]+)"""")
-                            .find(itemBody)?.groupValues?.get(1) ?: "Story $id"
-                        titles += "${i + 1}. $title"
-                    } finally {
-                        conn.disconnect()
-                    }
+                val titles = if (body.contains("titleline") || body.contains("news.ycombinator.com")) {
+                    parseHnHtml(body, limit)
+                } else {
+                    parseHnApi(body, limit)
                 }
                 val digest = titles.joinToString("\n")
                 context.variables["digest"] = digest
                 context.variables["digest_short"] = titles.take(2).joinToString(". ")
                 context.variables["date"] = SimpleDateFormat("dd/MM/yyyy", Locale.FRANCE).format(Date())
-                context.log("HN digest: ${titles.size} titres")
+                context.variables["hn_source"] = "https://news.ycombinator.com/"
+                context.log("HN digest (${titles.size} titres) depuis news.ycombinator.com")
                 NodeResult.Continue
             }.getOrElse { NodeResult.Fail(it.message ?: "Parse HN error") }
         }
+
+    private fun parseHnHtml(html: String, limit: Int): List<String> {
+        val regex = Regex("""<span class="titleline"[^>]*>\s*<a[^>]*>([^<]+)</a>""")
+        return regex.findAll(html).take(limit).mapIndexed { i, m ->
+            "${i + 1}. ${m.groupValues[1].trim()}"
+        }.toList()
+    }
+
+    private fun parseHnApi(idsJson: String, limit: Int): List<String> {
+        val ids = JSONArray(idsJson)
+        val titles = mutableListOf<String>()
+        for (i in 0 until minOf(limit, ids.length())) {
+            val id = ids.getInt(i)
+            val itemUrl = URL("https://hacker-news.firebaseio.com/v0/item/$id.json")
+            val conn = itemUrl.openConnection() as HttpURLConnection
+            try {
+                val itemBody = conn.inputStream.bufferedReader().readText()
+                val title = Regex(""""title"\s*:\s*"([^"]+)"""")
+                    .find(itemBody)?.groupValues?.get(1) ?: "Story $id"
+                titles += "${i + 1}. $title"
+            } finally {
+                conn.disconnect()
+            }
+        }
+        return titles
+    }
 }
 
 class NotifyNodeExecutor(
@@ -136,9 +153,15 @@ class WhatsAppPrepareNodeExecutor : WorkflowNodeExecutor {
     override val type = WorkflowNodeType.WHATSAPP_PREPARE
 
     override suspend fun execute(node: WorkflowNode, context: WorkflowExecutionContext): NodeResult {
-        val phone = context.resolve(node.config["phone"] ?: "")
-        val message = context.resolve(node.config["message"] ?: "")
-        context.variables["whatsapp_phone"] = phone.replace("+", "").replace(" ", "")
+        val phoneRaw = context.variables["whatsapp_phone"]
+            ?: node.config["phone"]
+            ?: ""
+        val messageRaw = context.variables["whatsapp_message"]
+            ?: node.config["message"]
+            ?: ""
+        val phone = context.resolve(phoneRaw).replace("+", "").replace(" ", "")
+        val message = context.resolve(messageRaw)
+        context.variables["whatsapp_phone"] = phone
         context.variables["whatsapp_message"] = message
         context.variables["time"] = SimpleDateFormat("HH:mm", Locale.FRANCE).format(Date())
         context.log("WhatsApp préparé pour $phone")
@@ -166,8 +189,33 @@ class WhatsAppOpenNodeExecutor(
         } else {
             context.startActivity(intent)
         }
-        execContext.log("WhatsApp ouvert — validation manuelle requise")
+        execContext.log("WhatsApp ouvert")
         return NodeResult.Continue
+    }
+}
+
+class WhatsAppSendAccessibilityNodeExecutor : WorkflowNodeExecutor {
+    override val type = WorkflowNodeType.WHATSAPP_SEND_ACCESSIBILITY
+
+    override suspend fun execute(node: WorkflowNode, context: WorkflowExecutionContext): NodeResult {
+        val autoSend = node.config["enabled"]?.toBooleanStrictOrNull()
+            ?: context.variables["whatsapp_auto_send"]?.toBooleanStrictOrNull()
+            ?: false
+        if (!autoSend) {
+            context.log("Envoi auto désactivé — validation manuelle")
+            return NodeResult.Continue
+        }
+        delay(1500)
+        return com.appbox.runtime.accessibility.HoshiAccessibilityService.sendWhatsAppMessage()
+            .fold(
+                onSuccess = {
+                    context.log("WhatsApp envoyé via Accessibilité HOSHI")
+                    NodeResult.Continue
+                },
+                onFailure = {
+                    NodeResult.Fail(it.message ?: "Échec envoi Accessibilité")
+                },
+            )
     }
 }
 
@@ -280,6 +328,7 @@ fun createNodeExecutors(
         WorkflowNodeType.LAUNCH_APP to LaunchAppNodeExecutor(context),
         WorkflowNodeType.WHATSAPP_PREPARE to WhatsAppPrepareNodeExecutor(),
         WorkflowNodeType.WHATSAPP_OPEN to WhatsAppOpenNodeExecutor(context),
+        WorkflowNodeType.WHATSAPP_SEND_ACCESSIBILITY to WhatsAppSendAccessibilityNodeExecutor(),
         WorkflowNodeType.DELAY to DelayNodeExecutor(),
         WorkflowNodeType.CONDITION to ConditionNodeExecutor(),
         WorkflowNodeType.STORE to StoreNodeExecutor(container),

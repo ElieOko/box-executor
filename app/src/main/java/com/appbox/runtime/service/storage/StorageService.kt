@@ -33,7 +33,9 @@ class StorageService(
 
     override suspend fun put(entry: StorageEntry): Result<Unit> = mutex.withLock {
         runCatching {
-            if (!permissions.hasPermission(entry.ownerPackage, RuntimePermission.STORAGE_WRITE)) {
+            if (entry.ownerPackage != RuntimeConstants.RUNTIME_PACKAGE &&
+                !permissions.hasPermission(entry.ownerPackage, RuntimePermission.STORAGE_WRITE)
+            ) {
                 throw SecurityException("STORAGE_WRITE not granted for ${entry.ownerPackage}")
             }
             val key = storageKey(entry.namespace, entry.key)
