@@ -36,32 +36,23 @@ fun MonitorScreen(
     events: List<RemoteMonitorEvent>,
     processes: List<TrackedProcess>,
     hasUsageAccess: Boolean,
+    canDrawOverlay: Boolean,
+    isLockTaskActive: Boolean,
+    isDeviceOwner: Boolean,
     onRequestUsageAccess: () -> Unit,
+    onRequestOverlay: () -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
-        if (!hasUsageAccess) {
-            AppBoxPanel(cornerRadius = 12.dp, modifier = Modifier.fillMaxWidth()) {
-                Row(modifier = Modifier.padding(12.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            "Accès usage requis",
-                            color = AppBoxThemeColors.TextPrimary,
-                            fontWeight = FontWeight.Medium,
-                            fontSize = 14.sp,
-                        )
-                        Text(
-                            "Autorisez l'accès aux statistiques d'utilisation pour un suivi précis du premier plan.",
-                            color = AppBoxThemeColors.TextSecondary,
-                            fontSize = 12.sp,
-                        )
-                    }
-                    TextButton(onClick = onRequestUsageAccess) {
-                        Text("Autoriser", color = AppBoxThemeColors.Accent)
-                    }
-                }
-            }
-            Spacer(modifier = Modifier.height(10.dp))
-        }
+        HostSetupPanel(
+            hasUsageAccess = hasUsageAccess,
+            canDrawOverlay = canDrawOverlay,
+            isLockTaskActive = isLockTaskActive,
+            isDeviceOwner = isDeviceOwner,
+            onRequestUsageAccess = onRequestUsageAccess,
+            onRequestOverlay = onRequestOverlay,
+        )
+
+        Spacer(modifier = Modifier.height(10.dp))
 
         Text("Processus encadrés (ActivityManager)", color = AppBoxThemeColors.TextSecondary, fontSize = 13.sp)
         Spacer(modifier = Modifier.height(8.dp))
@@ -117,6 +108,77 @@ fun MonitorScreen(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun HostSetupPanel(
+    hasUsageAccess: Boolean,
+    canDrawOverlay: Boolean,
+    isLockTaskActive: Boolean,
+    isDeviceOwner: Boolean,
+    onRequestUsageAccess: () -> Unit,
+    onRequestOverlay: () -> Unit,
+) {
+    AppBoxPanel(cornerRadius = 14.dp, modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            Text(
+                "Configuration hôte AppBox",
+                color = AppBoxThemeColors.TextPrimary,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 15.sp,
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            SetupRow("Lock Task", if (isLockTaskActive) "Actif" else "Inactif", isLockTaskActive)
+            SetupRow("Device Owner", if (isDeviceOwner) "Oui" else "Non (requis pour kiosque complet)", isDeviceOwner)
+            SetupRow("Usage stats", if (hasUsageAccess) "OK" else "Requis", hasUsageAccess)
+            SetupRow("Overlay retour", if (canDrawOverlay) "OK" else "Requis si app sort de la box", canDrawOverlay)
+
+            if (!hasUsageAccess || !canDrawOverlay) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Row {
+                    if (!hasUsageAccess) {
+                        TextButton(onClick = onRequestUsageAccess) {
+                            Text("Usage", color = AppBoxThemeColors.Accent, fontSize = 12.sp)
+                        }
+                    }
+                    if (!canDrawOverlay) {
+                        TextButton(onClick = onRequestOverlay) {
+                            Text("Overlay", color = AppBoxThemeColors.Accent, fontSize = 12.sp)
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                "Pour un hôte complet : provisionner AppBox en Device Owner (voir HOST_SETUP.md), " +
+                    "ajouter vos APK dans AppBox, activer overlay + usage stats.",
+                color = AppBoxThemeColors.TextTertiary,
+                fontSize = 11.sp,
+                lineHeight = 15.sp,
+            )
+        }
+    }
+}
+
+@Composable
+private fun SetupRow(label: String, value: String, ok: Boolean) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(label, color = AppBoxThemeColors.TextSecondary, fontSize = 12.sp)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            StatusIndicator(active = ok)
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+                value,
+                color = if (ok) AppBoxThemeColors.Success else AppBoxThemeColors.Warning,
+                fontSize = 12.sp,
+            )
         }
     }
 }

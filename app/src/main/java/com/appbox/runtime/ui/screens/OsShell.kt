@@ -57,11 +57,15 @@ import com.appbox.runtime.ui.RuntimeViewModel
 import com.appbox.runtime.ui.components.AppBoxBackground
 import com.appbox.runtime.ui.components.AppBoxPanel
 import com.appbox.runtime.ui.components.AppIcon
+import com.appbox.runtime.ui.components.EnvironmentExitButton
 import com.appbox.runtime.ui.components.StatusIndicator
 import com.appbox.runtime.ui.theme.AppBoxThemeColors
 
 @Composable
-fun OsShell(viewModel: RuntimeViewModel) {
+fun OsShell(
+    viewModel: RuntimeViewModel,
+    onExitEnvironment: () -> Unit,
+) {
     val uiState by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -70,7 +74,7 @@ fun OsShell(viewModel: RuntimeViewModel) {
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
-                viewModel.refreshUsageAccess()
+                viewModel.refreshEnvironmentState()
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -137,7 +141,11 @@ fun OsShell(viewModel: RuntimeViewModel) {
                         events = uiState.monitorEvents,
                         processes = uiState.trackedProcesses,
                         hasUsageAccess = uiState.hasUsageAccess,
+                        canDrawOverlay = uiState.canDrawOverlay,
+                        isLockTaskActive = uiState.isLockTaskActive,
+                        isDeviceOwner = uiState.isDeviceOwner,
                         onRequestUsageAccess = viewModel::openUsageAccessSettings,
+                        onRequestOverlay = viewModel::openOverlaySettings,
                     )
                     OsScreen.APP_PICKER -> AppPickerScreen(
                         candidates = viewModel.filteredCandidates(),
@@ -164,6 +172,14 @@ fun OsShell(viewModel: RuntimeViewModel) {
         SnackbarHost(
             hostState = snackbarHostState,
             modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 72.dp),
+        )
+
+        EnvironmentExitButton(
+            onClick = onExitEnvironment,
+            compact = true,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(top = 8.dp, end = 4.dp),
         )
     }
 }

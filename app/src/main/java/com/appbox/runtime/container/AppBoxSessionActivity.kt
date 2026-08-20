@@ -46,7 +46,7 @@ import androidx.lifecycle.lifecycleScope
 import com.appbox.runtime.AppBoxRuntimeApplication
 import com.appbox.runtime.core.model.AppLifecycleState
 import com.appbox.runtime.core.model.TrackedProcess
-import com.appbox.runtime.ui.system.ImmersiveMode
+import com.appbox.runtime.ui.system.ImmersiveModeHost
 import com.appbox.runtime.ui.theme.AppBoxTheme
 import com.appbox.runtime.ui.theme.AppBoxThemeColors
 import kotlinx.coroutines.Job
@@ -58,12 +58,15 @@ class AppBoxSessionActivity : ComponentActivity() {
 
     private lateinit var processTracker: ProcessTracker
     private lateinit var virtualDisplayHost: VirtualDisplayHost
+    private lateinit var immersiveHost: ImmersiveModeHost
     private var monitorJob: Job? = null
     private var launched = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        ImmersiveMode.apply(this)
+        immersiveHost = ImmersiveModeHost(this)
+        immersiveHost.attach()
+        LockTaskManager.enterLockTask(this)
 
         val packageName = intent.getStringExtra(EXTRA_PACKAGE_NAME)
             ?: run { finish(); return }
@@ -169,7 +172,12 @@ class AppBoxSessionActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        ImmersiveMode.apply(this)
+        immersiveHost.reapply()
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) immersiveHost.reapply()
     }
 
     override fun onDestroy() {
