@@ -180,7 +180,7 @@ class LaunchAppNodeExecutor(
     override suspend fun execute(node: WorkflowNode, execContext: WorkflowExecutionContext): NodeResult {
         val packageName = execContext.resolve(node.config["packageName"] ?: return NodeResult.Fail("packageName requis"))
         val displayName = execContext.resolve(node.config["displayName"] ?: packageName)
-        val inBox = node.config["inBox"]?.toBooleanStrictOrNull() ?: true
+        val inBox = node.config["inBox"]?.toBooleanStrictOrNull() ?: false
         val intent = if (inBox) {
             AppBoxSessionActivity.createIntent(context, packageName, displayName)
         } else {
@@ -528,7 +528,7 @@ class LaunchAppByNameNodeExecutor(
                 ?: return NodeResult.Fail("appName requis"),
         )
         val appName = appNameRaw.lowercase()
-        val preferBox = node.config["inBox"]?.toBooleanStrictOrNull() ?: true
+        val preferBox = node.config["inBox"]?.toBooleanStrictOrNull() ?: false
 
         val catalogApps = container.appRegistry.getAllApps()
         val catalogMatch = catalogApps.firstOrNull { it.displayName.lowercase() == appName }
@@ -536,11 +536,11 @@ class LaunchAppByNameNodeExecutor(
             ?: catalogApps.firstOrNull { appName.contains(it.displayName.lowercase()) }
 
         if (catalogMatch != null) {
-            val intent = AppBoxSessionActivity.createIntent(context, catalogMatch.packageName, catalogMatch.displayName)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            val intent = launchIntent(catalogMatch.packageName, catalogMatch.displayName, preferBox)
+                ?: return NodeResult.Fail("Impossible d'ouvrir ${catalogMatch.displayName}")
             context.startActivity(intent)
             execContext.variables["launched_app"] = catalogMatch.packageName
-            execContext.log("AppBox: ${catalogMatch.displayName}")
+            execContext.log("App catalogue: ${catalogMatch.displayName}")
             return NodeResult.Continue
         }
 
@@ -550,17 +550,22 @@ class LaunchAppByNameNodeExecutor(
             ?: systemApps.firstOrNull { appName.contains(it.displayName.lowercase()) }
             ?: return NodeResult.Fail("Application « $appNameRaw » introuvable dans AppBox ni le système")
 
-        val intent = if (preferBox) {
-            AppBoxSessionActivity.createIntent(context, match.packageName, match.displayName)
-        } else {
-            container.installedAppScanner.createLaunchIntent(match.packageName)
-                ?: return NodeResult.Fail("Impossible d'ouvrir ${match.displayName}")
-        }
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        val intent = launchIntent(match.packageName, match.displayName, preferBox)
+            ?: return NodeResult.Fail("Impossible d'ouvrir ${match.displayName}")
         context.startActivity(intent)
         execContext.variables["launched_app"] = match.packageName
         execContext.log("App ouverte: ${match.displayName}")
         return NodeResult.Continue
+    }
+
+    private fun launchIntent(packageName: String, displayName: String, inBox: Boolean): Intent? {
+        val intent = if (inBox) {
+            AppBoxSessionActivity.createIntent(context, packageName, displayName)
+        } else {
+            container.installedAppScanner.createLaunchIntent(packageName)
+                ?: context.packageManager.getLaunchIntentForPackage(packageName)
+        }
+        return intent?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     }
 }
 
