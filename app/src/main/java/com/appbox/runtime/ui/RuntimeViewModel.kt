@@ -70,6 +70,7 @@ class RuntimeViewModel(
         refreshEnvironmentState()
         observeMonitorEvents()
         observeProcesses()
+        registerCatalogApps()
     }
 
     fun refreshEnvironmentState() {
@@ -156,13 +157,31 @@ class RuntimeViewModel(
 
     fun addAppFromDevice(packageName: String) {
         viewModelScope.launch {
-            appRegistry.registerFromPackage(packageName)
+            appRegistry.registerFromPackage(packageName.trim())
                 .onSuccess { app ->
-                    _uiState.update { it.copy(successMessage = "${app.displayName} ajoutée") }
+                    LockTaskManager.syncWhitelist(appContext, appRegistry.getAllApps().map { it.packageName })
+                    _uiState.update {
+                        it.copy(successMessage = "${app.displayName} ajoutée à AppBox")
+                    }
                     refreshApps()
                     loadInstalledCandidates()
                 }
-                .onFailure { e -> _uiState.update { it.copy(error = e.message) } }
+                .onFailure { e ->
+                    _uiState.update { it.copy(error = e.message ?: "Impossible d'ajouter l'application") }
+                }
+        }
+    }
+
+    fun registerCatalogApps() {
+        viewModelScope.launch {
+            val added = appRegistry.ensureBundledHostApps()
+            if (added.isNotEmpty()) {
+                _uiState.update {
+                    it.copy(successMessage = "${added.size} app(s) hôte(s) enregistrée(s)")
+                }
+            }
+            LockTaskManager.syncWhitelist(appContext, appRegistry.getAllApps().map { it.packageName })
+            refreshApps()
         }
     }
 

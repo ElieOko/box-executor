@@ -2,6 +2,8 @@ package com.appbox.runtime.service.manager
 
 import android.content.Context
 import android.content.pm.PackageManager
+import com.appbox.runtime.core.config.HostAppCatalog
+import com.appbox.runtime.core.config.HostAppDefinition
 import com.appbox.runtime.core.contract.AppRegistryContract
 import com.appbox.runtime.core.contract.RemoteMonitorContract
 import com.appbox.runtime.core.model.AppBoxApp
@@ -39,16 +41,33 @@ class AppRegistry(
                 apps[app.packageName] = app
             }
         }
+        ensureBundledHostApps()
+    }
+
+    /** Enregistre automatiquement les apps du catalogue si elles sont installées. */
+    suspend fun ensureBundledHostApps(): List<AppBoxApp> {
+        val registered = mutableListOf<AppBoxApp>()
+        HostAppCatalog.apps.forEach { definition ->
+            if (!definition.autoRegisterOnStartup) return@forEach
+            if (getApp(definition.packageName) != null) return@forEach
+            if (!isPackageInstalled(definition.packageName)) return@forEach
+
+            registerFromPackage(definition.packageName)
+                .onSuccess { registered.add(it) }
+        }
+        return registered
     }
 
     override suspend fun registerApp(app: AppBoxApp): Result<AppBoxApp> = mutex.withLock {
         runCatching {
             val signatureHash = resolveSignatureHash(app.packageName)
+            val hostDef = HostAppCatalog.find(app.packageName)
             val trusted = trustedApps.find { it.packageName == app.packageName }
             val registered = app.copy(
                 signatureHash = signatureHash,
                 permissions = when {
                     trusted != null -> trusted.defaultPermissions
+                    hostDef != null -> hostDef.permissions
                     app.permissions.isNotEmpty() -> app.permissions
                     else -> defaultUserPermissions
                 },
@@ -128,11 +147,20 @@ class AppRegistry(
         }
 
     suspend fun registerFromPackage(packageName: String): Result<AppBoxApp> {
+        if (!isPackageInstalled(packageName)) {
+            return Result.failure(
+                PackageManager.NameNotFoundException(
+                    "Application non installée: $packageName",
+                ),
+            )
+        }
+
         val pm = context.packageManager
         return runCatching {
             val info = pm.getPackageInfo(packageName, PackageManager.GET_META_DATA)
             val appInfo = pm.getApplicationInfo(packageName, 0)
-            val displayName = pm.getApplicationLabel(appInfo).toString()
+            val catalogName = HostAppCatalog.find(packageName)?.displayName
+            val displayName = catalogName ?: pm.getApplicationLabel(appInfo).toString()
             registerApp(
                 AppBoxApp(
                     packageName = packageName,
@@ -140,9 +168,18 @@ class AppRegistry(
                     versionName = info.versionName ?: "unknown",
                     versionCode = info.longVersionCode,
                     signatureHash = resolveSignatureHash(packageName),
-                    permissions = defaultUserPermissions,
+                    permissions = HostAppCatalog.find(packageName)?.permissions ?: defaultUserPermissions,
                 ),
             ).getOrThrow()
+        }
+    }
+
+    fun isPackageInstalled(packageName: String): Boolean {
+        return try {
+            context.packageManager.getPackageInfo(packageName, 0)
+            true
+        } catch (_: PackageManager.NameNotFoundException) {
+            false
         }
     }
 
@@ -163,9 +200,22 @@ class AppRegistry(
     }
 
     fun isTrusted(packageName: String): Boolean {
+        if (HostAppCatalog.isCatalogApp(packageName) && apps.containsKey(packageName)) {
+            val def = HostAppCatalog.find(packageName) ?: return false
+            if (def.signatureHash == null) return true
+            return def.signatureHash == resolveSignatureHash(packageName)
+        }
         val hash = resolveSignatureHash(packageName)
         return trustedApps.any { it.packageName == packageName && it.signatureHash == hash } ||
             trustedApps.any { it.packageName == packageName && it.signatureHash != "runtime_self" }
+    }
+
+    fun getPendingCatalogApps(): List<HostAppDefinition> {
+        return HostAppCatalog.apps.filter { def ->
+            def.autoRegisterOnStartup &&
+                !apps.containsKey(def.packageName) &&
+                isPackageInstalled(def.packageName)
+        }
     }
 
     private suspend fun persistLocked() {
