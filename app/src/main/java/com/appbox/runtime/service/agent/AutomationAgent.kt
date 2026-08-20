@@ -38,6 +38,8 @@ class AutomationAgent(
     private val memory: HoshiMemoryStore,
     private val contactGroups: ContactGroupStore,
     private val installedAppScanner: com.appbox.runtime.service.manager.InstalledAppScanner,
+    private val appRegistry: com.appbox.runtime.core.contract.AppRegistryContract,
+    private val openAiClient: OpenAiClient = OpenAiClient(),
     private val openAiRouter: OpenAiIntentRouter = OpenAiIntentRouter(),
     private val onSpeak: (String) -> Unit,
 ) : AgentServiceContract {
@@ -64,6 +66,7 @@ class AutomationAgent(
         val greeting = JarvisPersona.startupGreeting(userConfig)
         speakAndRemember(greeting)
         log(AgentLogLevel.INFO, "HOSHI démarré (mode JARVIS=${userConfig.jarvisMode})")
+        com.appbox.runtime.service.overlay.HoshiFloatingOverlayService.show(context)
         _state.value = _state.value.copy(status = AgentStatus.IDLE, updatedAt = System.currentTimeMillis())
     }
 
@@ -155,7 +158,8 @@ class AutomationAgent(
     override suspend fun handleVoice(text: String): Result<WorkflowRun?> {
         val file = instructions ?: return Result.failure(IllegalStateException("Instructions non chargées"))
         val normalized = normalizeVoiceInput(text)
-        if (normalized.isBlank()) {
+        val corrected = VoiceInputCorrector.correct(normalized)
+        if (corrected.isBlank()) {
             if (text.contains("hoshi")) {
                 speakAndRemember(JarvisPersona.wakeAck(userConfig))
             }
@@ -169,45 +173,101 @@ class AutomationAgent(
 
         _state.value = _state.value.copy(
             status = AgentStatus.LISTENING,
-            lastVoiceCommand = normalized,
+            lastVoiceCommand = corrected,
             updatedAt = System.currentTimeMillis(),
         )
 
         if (userConfig.openAiEnabled && userConfig.openAiApiKey.isNotBlank()) {
-            resolveWithOpenAi(file, normalized)?.let { return it }
+            resolveWithOpenAi(file, corrected)?.let { return it }
         }
 
-        return handleVoiceWithRules(file, normalized)
+        return handleVoiceWithRules(file, corrected)
+    }
+
+    private suspend fun buildAppsContext(): String {
+        val catalog = appRegistry.getAllApps().joinToString(", ") { "${it.displayName} [box]" }
+        val installed = installedAppScanner.scanLaunchableApps().take(40).joinToString(", ") { it.displayName }
+        return "Catalogue AppBox: $catalog | Système: $installed"
     }
 
     private suspend fun resolveWithOpenAi(
         file: InstructionFile,
-        normalized: String,
+        corrected: String,
     ): Result<WorkflowRun?>? {
         val memoryContext = if (userConfig.memoryEnabled) memory.buildMemoryContext() else ""
         val recentTurns = if (userConfig.memoryEnabled) memory.getRecentTurns(8) else emptyList()
+        val catalogCtx = appRegistry.getAllApps().joinToString("\n") { "- ${it.displayName} → ${it.packageName} (AppBox)" }
 
-        return openAiRouter.resolveIntent(
-            userText = normalized,
+        return openAiRouter.resolveIntentRobust(
+            userText = corrected,
             config = userConfig,
             workflows = file.agent.workflows,
             voiceCommands = file.agent.voiceCommands,
             memoryContext = memoryContext,
             recentTurns = recentTurns,
             contactGroupsContext = contactGroups.buildContextForLlm(contactGroups.getGroups()),
-            installedAppsContext = installedAppScanner.scanLaunchableApps()
-                .take(50)
-                .joinToString(", ") { it.displayName },
+            installedAppsContext = installedAppScanner.scanLaunchableApps().take(50).joinToString(", ") { it.displayName },
+            catalogAppsContext = catalogCtx,
         ).fold(
-            onSuccess = { intent -> processOpenAiIntent(intent) },
+            onSuccess = { intent ->
+                when {
+                    intent.action == "unknown" -> answerDirectly(corrected)
+                    else -> processOpenAiIntent(intent, corrected)
+                }
+            },
             onFailure = { error ->
                 log(AgentLogLevel.ERROR, "OpenAI: ${error.message}")
-                null
+                answerDirectly(corrected)
             },
         )
     }
 
-    private suspend fun processOpenAiIntent(intent: com.appbox.runtime.core.model.OpenAiIntentResult): Result<WorkflowRun?>? {
+    private suspend fun answerDirectly(question: String): Result<WorkflowRun?>? {
+        val appName = VoiceInputCorrector.extractAppName(question)
+        if (appName != null) {
+            val catalogMatch = appRegistry.getAllApps().firstOrNull {
+                it.displayName.lowercase().contains(appName) || appName.contains(it.displayName.lowercase())
+            }
+            if (catalogMatch != null) {
+                return handleCommand(
+                    AgentCommand(
+                        id = UUID.randomUUID().toString(),
+                        source = AgentCommandSource.VOICE,
+                        action = "launch_appbox_catalog",
+                        parameters = mapOf("app_name" to catalogMatch.displayName),
+                    ),
+                )
+            }
+        }
+        return openAiClient.answerConversational(
+            question = question,
+            config = userConfig,
+            memoryContext = if (userConfig.memoryEnabled) memory.buildMemoryContext() else "",
+            appsContext = buildAppsContext(),
+        ).fold(
+            onSuccess = { answer ->
+                speakAndRemember(answer)
+                _state.value = _state.value.copy(status = AgentStatus.IDLE)
+                Result.success(null)
+            },
+            onFailure = { error ->
+                log(AgentLogLevel.ERROR, "Réponse OpenAI: ${error.message}")
+                val fallback = if (userConfig.jarvisMode) {
+                    "Je n'ai pas pu contacter le modèle, ${JarvisPersona.addressTitle(userConfig)}. Vérifiez la clé OpenAI ou reformulez une commande simple."
+                } else {
+                    "Impossible de joindre OpenAI. Vérifiez la configuration ou dites une commande HOSHI."
+                }
+                speakAndRemember(fallback)
+                _state.value = _state.value.copy(status = AgentStatus.IDLE)
+                Result.success(null)
+            },
+        )
+    }
+
+    private suspend fun processOpenAiIntent(
+        intent: com.appbox.runtime.core.model.OpenAiIntentResult,
+        originalText: String,
+    ): Result<WorkflowRun?>? {
         log(AgentLogLevel.INFO, "OpenAI → ${intent.action} ${intent.workflowId ?: ""}")
         return when {
             intent.isRememberAction() -> {
@@ -223,12 +283,16 @@ class AutomationAgent(
             }
             intent.isWorkflowAction() -> {
                 intent.speak?.let { speakAndRemember(it) }
+                var params = intent.parameters.toMutableMap()
+                if (params["app_name"].isNullOrBlank()) {
+                    VoiceInputCorrector.extractAppName(originalText)?.let { params["app_name"] = it }
+                }
                 handleCommand(
                     AgentCommand(
                         id = UUID.randomUUID().toString(),
                         source = AgentCommandSource.VOICE,
                         action = intent.workflowId!!,
-                        parameters = intent.parameters,
+                        parameters = params,
                     ),
                 )
             }

@@ -20,6 +20,47 @@ class OpenAiIntentRouter(
     private val json: Json = Json { ignoreUnknownKeys = true },
 ) {
 
+    suspend fun resolveIntentRobust(
+        userText: String,
+        config: HoshiUserConfig,
+        workflows: List<WorkflowDefinition>,
+        voiceCommands: List<VoiceCommandMapping>,
+        memoryContext: String = "",
+        recentTurns: List<ConversationTurn> = emptyList(),
+        contactGroupsContext: String = "",
+        installedAppsContext: String = "",
+        catalogAppsContext: String = "",
+    ): Result<OpenAiIntentResult> = withContext(Dispatchers.IO) {
+        var lastError: Throwable? = null
+        var attemptText = userText
+        for (attempt in 0 until 3) {
+            val result = resolveIntent(
+                userText = attemptText,
+                config = config,
+                workflows = workflows,
+                voiceCommands = voiceCommands,
+                memoryContext = memoryContext,
+                recentTurns = recentTurns,
+                contactGroupsContext = contactGroupsContext,
+                installedAppsContext = installedAppsContext,
+                catalogAppsContext = catalogAppsContext,
+            )
+            result.fold(
+                onSuccess = { intent ->
+                    if (intent.action != "unknown" || attempt == 2) {
+                        return@withContext Result.success(intent)
+                    }
+                    attemptText = "$userText [correction: choisis workflow ou speak, ne réponds pas unknown]"
+                },
+                onFailure = { e ->
+                    lastError = e
+                    if (attempt < 2) attemptText = "$userText [retry: ${e.message?.take(80)}]"
+                },
+            )
+        }
+        Result.failure(lastError ?: IllegalStateException("OpenAI: intent inconnu"))
+    }
+
     suspend fun resolveIntent(
         userText: String,
         config: HoshiUserConfig,
@@ -29,6 +70,7 @@ class OpenAiIntentRouter(
         recentTurns: List<ConversationTurn> = emptyList(),
         contactGroupsContext: String = "",
         installedAppsContext: String = "",
+        catalogAppsContext: String = "",
     ): Result<OpenAiIntentResult> = withContext(Dispatchers.IO) {
         val apiKey = config.openAiApiKey.trim()
         if (apiKey.isBlank() || !config.openAiEnabled) {
@@ -37,7 +79,7 @@ class OpenAiIntentRouter(
         runCatching {
             val body = buildRequestBody(
                 userText, config, workflows, voiceCommands, memoryContext, recentTurns,
-                contactGroupsContext, installedAppsContext,
+                contactGroupsContext, installedAppsContext, catalogAppsContext,
             )
             val responseText = postChatCompletion(apiKey, body)
             parseIntentResponse(responseText)
@@ -53,6 +95,7 @@ class OpenAiIntentRouter(
         recentTurns: List<ConversationTurn>,
         contactGroupsContext: String,
         installedAppsContext: String,
+        catalogAppsContext: String,
     ): String {
         val time = SimpleDateFormat("EEEE dd/MM/yyyy HH:mm", Locale.FRANCE).format(Date())
         val workflowList = workflows.joinToString("\n") { wf ->
@@ -83,6 +126,9 @@ class OpenAiIntentRouter(
             Applications installées:
             $installedAppsContext
 
+            Apps AppBox (catalogue UI — priorité, lancer dans la box):
+            $catalogAppsContext
+
             Groupes contacts WhatsApp:
             $contactGroupsContext
 
@@ -100,7 +146,7 @@ class OpenAiIntentRouter(
 
             Règles:
             - whatsapp_group_broadcast: params contact_group_id, message_hint
-            - launch_app_by_name: params app_name (Instagram, Chrome, etc.)
+            - launch_appbox_catalog / launch_any_app: params app_name (catalogue AppBox prioritaire)
             - open_system_app: params app_target (settings, wifi)
             - speak: conversation et questions tech détaillées
             - remember: fact_key, fact_value

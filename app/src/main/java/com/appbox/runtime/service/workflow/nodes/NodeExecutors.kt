@@ -489,19 +489,35 @@ class LaunchAppByNameNodeExecutor(
     override val type = WorkflowNodeType.LAUNCH_APP_BY_NAME
 
     override suspend fun execute(node: WorkflowNode, execContext: WorkflowExecutionContext): NodeResult {
-        val appName = execContext.resolve(
+        val appNameRaw = execContext.resolve(
             node.config["appName"]
                 ?: execContext.variables["app_name"]
                 ?: return NodeResult.Fail("appName requis"),
-        ).lowercase()
-        val inBox = node.config["inBox"]?.toBooleanStrictOrNull() ?: false
-        val apps = container.installedAppScanner.scanLaunchableApps()
-        val match = apps.firstOrNull { it.displayName.lowercase() == appName }
-            ?: apps.firstOrNull { it.displayName.lowercase().contains(appName) }
-            ?: apps.firstOrNull { appName.contains(it.displayName.lowercase()) }
-            ?: return NodeResult.Fail("Application « $appName » introuvable")
+        )
+        val appName = appNameRaw.lowercase()
+        val preferBox = node.config["inBox"]?.toBooleanStrictOrNull() ?: true
 
-        val intent = if (inBox) {
+        val catalogApps = container.appRegistry.getAllApps()
+        val catalogMatch = catalogApps.firstOrNull { it.displayName.lowercase() == appName }
+            ?: catalogApps.firstOrNull { it.displayName.lowercase().contains(appName) }
+            ?: catalogApps.firstOrNull { appName.contains(it.displayName.lowercase()) }
+
+        if (catalogMatch != null) {
+            val intent = AppBoxSessionActivity.createIntent(context, catalogMatch.packageName, catalogMatch.displayName)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.startActivity(intent)
+            execContext.variables["launched_app"] = catalogMatch.packageName
+            execContext.log("AppBox: ${catalogMatch.displayName}")
+            return NodeResult.Continue
+        }
+
+        val systemApps = container.installedAppScanner.scanLaunchableApps()
+        val match = systemApps.firstOrNull { it.displayName.lowercase() == appName }
+            ?: systemApps.firstOrNull { it.displayName.lowercase().contains(appName) }
+            ?: systemApps.firstOrNull { appName.contains(it.displayName.lowercase()) }
+            ?: return NodeResult.Fail("Application « $appNameRaw » introuvable dans AppBox ni le système")
+
+        val intent = if (preferBox) {
             AppBoxSessionActivity.createIntent(context, match.packageName, match.displayName)
         } else {
             container.installedAppScanner.createLaunchIntent(match.packageName)

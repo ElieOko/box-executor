@@ -1,13 +1,13 @@
 {
-  "version": 2,
+  "version": 3,
   "agent": {
     "name": "HOSHI",
-    "description": "Assistant JARVIS — voix, mémoire, proactivité, contrôle UI",
+    "description": "Assistant JARVIS autonome — correction vocale, OpenAI robuste, catalogue AppBox, overlay déplaçable",
     "workflows": [
       {
         "id": "whatsapp_scheduled_send",
         "name": "WhatsApp planifié HOSHI",
-        "description": "Ouvre WhatsApp et envoie votre message à l'heure configurée",
+        "description": "Ouvre WhatsApp et envoie votre message à l'heure configurée (envoi auto UI)",
         "enabled": true,
         "nodes": [
           {
@@ -49,7 +49,7 @@
             "id": "n3",
             "type": "SPEAK",
             "label": "Confirmation HOSHI",
-            "config": { "text": "WhatsApp traité." },
+            "config": { "text": "WhatsApp traité, {{user_title}}." },
             "positionX": 940,
             "positionY": 100
           }
@@ -64,7 +64,7 @@
       {
         "id": "hn_daily_digest",
         "name": "Digest Hacker News",
-        "description": "Actualités depuis https://news.ycombinator.com/",
+        "description": "Actualités traduites EN→FR depuis https://news.ycombinator.com/",
         "enabled": true,
         "nodes": [
           {
@@ -110,7 +110,7 @@
             "type": "SPEAK",
             "label": "Lecture HOSHI",
             "config": {
-              "text": "Voici l'actualité Hacker News. {{digest_short}}"
+              "text": "Voici l'actualité Hacker News, {{user_title}}. {{digest_short}}"
             },
             "positionX": 940,
             "positionY": 300
@@ -126,7 +126,7 @@
       {
         "id": "voice_launch_yvent",
         "name": "Lancer Yvent",
-        "description": "Ouvre com.yvent.app dans la box",
+        "description": "Ouvre com.yvent.app dans la box AppBox",
         "enabled": true,
         "nodes": [
           {
@@ -153,7 +153,7 @@
             "id": "n2",
             "type": "SPEAK",
             "label": "Confirmation",
-            "config": { "text": "J'ouvre Yvent." },
+            "config": { "text": "J'ouvre Yvent dans la box, {{user_title}}." },
             "positionX": 580,
             "positionY": 500
           }
@@ -166,7 +166,7 @@
       {
         "id": "jarvis_morning_briefing",
         "name": "Briefing matinal JARVIS",
-        "description": "Briefing proactif — actualités et statut",
+        "description": "Briefing proactif — actualités et statut système",
         "enabled": true,
         "nodes": [
           {
@@ -198,7 +198,7 @@
             "type": "NOTIFY",
             "label": "Notification briefing",
             "config": {
-              "title": "Briefing HOSHI",
+              "title": "Briefing HOSHI · {{date}}",
               "body": "{{digest_short}}"
             },
             "positionX": 720,
@@ -209,7 +209,7 @@
             "type": "SPEAK",
             "label": "Briefing vocal",
             "config": {
-              "text": "Bonjour {{user_title}}. Voici votre briefing. {{digest_short}}"
+              "text": "Bonjour {{user_title}}. Voici votre briefing matinal. {{digest_short}}"
             },
             "positionX": 940,
             "positionY": 700
@@ -225,7 +225,7 @@
       {
         "id": "jarvis_read_screen",
         "name": "Lire l'écran",
-        "description": "Lit le contenu visible via Accessibilité",
+        "description": "Lit le contenu visible via Accessibilité HOSHI",
         "enabled": true,
         "nodes": [
           {
@@ -249,7 +249,7 @@
             "type": "SPEAK",
             "label": "Analyse vocale",
             "config": {
-              "text": "{{user_title}}, voici ce que je vois. {{screen_preview}}"
+              "text": "{{user_title}}, voici ce que je vois à l'écran. {{screen_preview}}"
             },
             "positionX": 500,
             "positionY": 900
@@ -263,7 +263,7 @@
       {
         "id": "whatsapp_group_broadcast",
         "name": "WhatsApp groupe personnalisé",
-        "description": "Envoie un message personnalisé à chaque contact du groupe",
+        "description": "Envoie un message personnalisé IA à chaque contact du groupe",
         "enabled": true,
         "nodes": [
           {
@@ -286,7 +286,9 @@
             "id": "n2",
             "type": "SPEAK",
             "label": "Confirmation",
-            "config": { "text": "{{user_title}}, messages envoyés à {{broadcast_sent}} contacts sur {{broadcast_total}}." },
+            "config": {
+              "text": "{{user_title}}, messages personnalisés envoyés à {{broadcast_sent}} contacts sur {{broadcast_total}}."
+            },
             "positionX": 560,
             "positionY": 1100
           }
@@ -298,8 +300,8 @@
       },
       {
         "id": "launch_any_app",
-        "name": "Ouvrir une application",
-        "description": "Lance n'importe quelle app installée par son nom",
+        "name": "Ouvrir une application système",
+        "description": "Lance une app installée sur l'appareil par son nom vocal",
         "enabled": true,
         "nodes": [
           {
@@ -314,7 +316,7 @@
             "id": "n1",
             "type": "LAUNCH_APP_BY_NAME",
             "label": "Ouvrir app",
-            "config": { "inBox": "false" },
+            "config": { "inBox": "false", "appName": "{{app_name}}" },
             "positionX": 300,
             "positionY": 1300
           },
@@ -331,27 +333,109 @@
           { "id": "e1", "fromNodeId": "t1", "toNodeId": "n1" },
           { "id": "e2", "fromNodeId": "n1", "toNodeId": "n2" }
         ]
+      },
+      {
+        "id": "launch_appbox_catalog",
+        "name": "Ouvrir app catalogue AppBox",
+        "description": "Lance une app ajoutée dans l'UI AppBox par son nom — priorité catalogue",
+        "enabled": true,
+        "nodes": [
+          {
+            "id": "t1",
+            "type": "TRIGGER_VOICE",
+            "label": "Commande catalogue",
+            "config": {},
+            "positionX": 60,
+            "positionY": 1500
+          },
+          {
+            "id": "n1",
+            "type": "LAUNCH_APP_BY_NAME",
+            "label": "Catalogue AppBox",
+            "config": { "inBox": "true", "appName": "{{app_name}}" },
+            "positionX": 300,
+            "positionY": 1500
+          },
+          {
+            "id": "n2",
+            "type": "SPEAK",
+            "label": "Confirmé",
+            "config": {
+              "text": "J'ouvre {{app_name}} dans la box, {{user_title}}."
+            },
+            "positionX": 560,
+            "positionY": 1500
+          }
+        ],
+        "edges": [
+          { "id": "e1", "fromNodeId": "t1", "toNodeId": "n1" },
+          { "id": "e2", "fromNodeId": "n1", "toNodeId": "n2" }
+        ]
+      },
+      {
+        "id": "open_system_app",
+        "name": "Ouvrir réglages système",
+        "description": "Ouvre paramètres, Wi-Fi, Bluetooth ou accessibilité",
+        "enabled": true,
+        "nodes": [
+          {
+            "id": "t1",
+            "type": "TRIGGER_VOICE",
+            "label": "Commande système",
+            "config": {},
+            "positionX": 60,
+            "positionY": 1700
+          },
+          {
+            "id": "n1",
+            "type": "OPEN_SYSTEM_APP",
+            "label": "Réglages",
+            "config": { "target": "{{app_target}}" },
+            "positionX": 300,
+            "positionY": 1700
+          },
+          {
+            "id": "n2",
+            "type": "SPEAK",
+            "label": "Confirmé",
+            "config": { "text": "Réglages ouverts, {{user_title}}." },
+            "positionX": 560,
+            "positionY": 1700
+          }
+        ],
+        "edges": [
+          { "id": "e1", "fromNodeId": "t1", "toNodeId": "n1" },
+          { "id": "e2", "fromNodeId": "n1", "toNodeId": "n2" }
+        ]
       }
     ],
     "schedules": [],
     "voiceCommands": [
       { "phrase": "envoie whatsapp", "workflowId": "whatsapp_scheduled_send", "parameters": { "immediate": "true" } },
-      { "phrase": "envoyer whatsapp", "workflowId": "whatsapp_scheduled_send" },
+      { "phrase": "envoyer whatsapp", "workflowId": "whatsapp_scheduled_send", "parameters": { "immediate": "true" } },
       { "phrase": "digest hacker news", "workflowId": "hn_daily_digest" },
       { "phrase": "actualités", "workflowId": "hn_daily_digest" },
       { "phrase": "ouvrir yvent", "workflowId": "voice_launch_yvent" },
+      { "phrase": "lance yvent", "workflowId": "voice_launch_yvent" },
       { "phrase": "lis l'écran", "workflowId": "jarvis_read_screen" },
       { "phrase": "que vois-tu", "workflowId": "jarvis_read_screen" },
       { "phrase": "briefing", "workflowId": "jarvis_morning_briefing" },
+      { "phrase": "briefing matinal", "workflowId": "jarvis_morning_briefing" },
       { "phrase": "envoie au groupe", "workflowId": "whatsapp_group_broadcast" },
       { "phrase": "message au groupe", "workflowId": "whatsapp_group_broadcast" },
-      { "phrase": "ouvre", "workflowId": "launch_any_app" },
-      { "phrase": "ouvrir", "workflowId": "launch_any_app" }
+      { "phrase": "ouvre", "workflowId": "launch_appbox_catalog" },
+      { "phrase": "ouvrir", "workflowId": "launch_appbox_catalog" },
+      { "phrase": "lance", "workflowId": "launch_appbox_catalog" },
+      { "phrase": "lancer", "workflowId": "launch_appbox_catalog" },
+      { "phrase": "ouvre les paramètres", "workflowId": "open_system_app", "parameters": { "app_target": "settings" } },
+      { "phrase": "paramètres", "workflowId": "open_system_app", "parameters": { "app_target": "settings" } },
+      { "phrase": "wifi", "workflowId": "open_system_app", "parameters": { "app_target": "wifi" } },
+      { "phrase": "accessibilité", "workflowId": "open_system_app", "parameters": { "app_target": "accessibility" } }
     ],
     "reactiveExpressions": [
       {
-        "patterns": ["bonjour", "salut", "coucou"],
-        "response": "Bonjour Monsieur. Tous les systèmes sont opérationnels. Que puis-je faire pour vous ?"
+        "patterns": ["bonjour", "salut", "coucou", "hello"],
+        "response": "Bonjour {{user_title}}. Tous les systèmes sont opérationnels. Que puis-je faire pour vous ?"
       },
       {
         "patterns": ["comment ça va", "ca va", "comment vas-tu"],
@@ -359,28 +443,45 @@
       },
       {
         "patterns": ["merci", "thanks"],
-        "response": "Avec plaisir."
+        "response": "Avec plaisir, {{user_title}}."
       },
       {
         "patterns": ["quelle heure", "il est quelle heure"],
-        "response": "Consultez l'heure sur votre écran, ou demandez-moi d'envoyer WhatsApp à une heure précise dans la configuration."
+        "response": "Consultez l'heure sur votre écran, ou demandez-moi d'envoyer WhatsApp à une heure précise dans la configuration HOSHI."
       },
       {
-        "patterns": ["hacker news", "hn", "actualité", "actualites"],
+        "patterns": ["hacker news", "hn", "actualité", "actualites", "actualités"],
         "workflowId": "hn_daily_digest"
       },
       {
-        "patterns": ["whatsapp", "message"],
-        "workflowId": "whatsapp_scheduled_send"
+        "patterns": ["whatsapp", "envoie un message"],
+        "workflowId": "whatsapp_scheduled_send",
+        "parameters": { "immediate": "true" }
       },
       {
-        "patterns": ["yvent", "ouvre l'application"],
+        "patterns": ["yvent", "ouvre yvent"],
         "workflowId": "voice_launch_yvent"
+      },
+      {
+        "patterns": ["groupe", "broadcast", "contacts"],
+        "workflowId": "whatsapp_group_broadcast"
+      },
+      {
+        "patterns": ["paramètres", "reglages", "réglages"],
+        "workflowId": "open_system_app",
+        "parameters": { "app_target": "settings" }
+      },
+      {
+        "patterns": ["lis", "écran", "que vois"],
+        "workflowId": "jarvis_read_screen"
       }
     ],
     "eventTriggers": [
       { "topic": "hoshi.run", "workflowId": "hn_daily_digest" },
-      { "topic": "agent.run", "workflowId": "hn_daily_digest" }
+      { "topic": "agent.run", "workflowId": "hn_daily_digest" },
+      { "topic": "hoshi.autonomous.briefing", "workflowId": "jarvis_morning_briefing" },
+      { "topic": "hoshi.autonomous.digest", "workflowId": "hn_daily_digest" },
+      { "topic": "hoshi.autonomous.whatsapp", "workflowId": "whatsapp_scheduled_send" }
     ]
   }
 }

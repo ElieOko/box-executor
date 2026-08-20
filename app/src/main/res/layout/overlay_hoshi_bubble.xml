@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/hoshi_bubble_root"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:padding="4dp">
+
+    <TextView
+        android:id="@+id/hoshi_bubble_label"
+        android:layout_width="52dp"
+        android:layout_height="52dp"
+        android:background="@drawable/bg_hoshi_bubble"
+        android:gravity="center"
+        android:text="H"
+        android:textColor="#FFFFFF"
+        android:textSize="18sp"
+        android:textStyle="bold"
+        android:contentDescription="HOSHI assistant" />
+
+</FrameLayout>
