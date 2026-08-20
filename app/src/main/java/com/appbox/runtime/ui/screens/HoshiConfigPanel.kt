@@ -10,10 +10,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -32,7 +30,7 @@ fun HoshiConfigPanel(
 ) {
     AppBoxPanel(cornerRadius = 14.dp, modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Configuration HOSHI", color = AppBoxThemeColors.TextPrimary, fontSize = 14.sp)
+            Text("WhatsApp planifié", color = AppBoxThemeColors.TextPrimary, fontSize = 14.sp)
 
             OutlinedTextField(
                 value = config.whatsappPhone,
@@ -46,7 +44,7 @@ fun HoshiConfigPanel(
             OutlinedTextField(
                 value = config.whatsappMessage,
                 onValueChange = { onConfigChange(config.copy(whatsappMessage = it)) },
-                label = { Text("Message WhatsApp") },
+                label = { Text("Votre message") },
                 modifier = Modifier.fillMaxWidth(),
                 minLines = 2,
                 maxLines = 4,
@@ -56,11 +54,9 @@ fun HoshiConfigPanel(
                 OutlinedTextField(
                     value = config.whatsappHour.toString(),
                     onValueChange = { v ->
-                        v.toIntOrNull()?.coerceIn(0, 23)?.let {
-                            onConfigChange(config.copy(whatsappHour = it))
-                        }
+                        v.toIntOrNull()?.coerceIn(0, 23)?.let { onConfigChange(config.copy(whatsappHour = it)) }
                     },
-                    label = { Text("Heure WA") },
+                    label = { Text("Heure") },
                     modifier = Modifier.weight(1f),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     singleLine = true,
@@ -68,52 +64,36 @@ fun HoshiConfigPanel(
                 OutlinedTextField(
                     value = config.whatsappMinute.toString(),
                     onValueChange = { v ->
-                        v.toIntOrNull()?.coerceIn(0, 59)?.let {
-                            onConfigChange(config.copy(whatsappMinute = it))
-                        }
+                        v.toIntOrNull()?.coerceIn(0, 59)?.let { onConfigChange(config.copy(whatsappMinute = it)) }
                     },
-                    label = { Text("Min WA") },
+                    label = { Text("Minute") },
                     modifier = Modifier.weight(1f),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     singleLine = true,
                 )
             }
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text("Envoi auto (Accessibilité)", color = AppBoxThemeColors.TextSecondary, fontSize = 12.sp)
-                Switch(
-                    checked = config.whatsappAutoSend,
-                    onCheckedChange = { onConfigChange(config.copy(whatsappAutoSend = it)) },
-                )
-            }
+            Text(
+                "HOSHI enverra automatiquement sans appuyer sur Envoyer (Accessibilité requise).",
+                color = AppBoxThemeColors.TextSecondary,
+                fontSize = 11.sp,
+            )
 
-            if (config.whatsappAutoSend && !accessibilityEnabled) {
-                Text(
-                    "Activez HOSHI dans Paramètres → Accessibilité",
-                    color = AppBoxThemeColors.Accent,
-                    fontSize = 11.sp,
-                    modifier = Modifier.fillMaxWidth(),
-                )
+            if (!accessibilityEnabled) {
                 AppBoxPanel(
                     cornerRadius = 8.dp,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable(onClick = onOpenAccessibility),
+                    modifier = Modifier.fillMaxWidth().clickable(onClick = onOpenAccessibility),
                 ) {
                     Text(
-                        "Ouvrir Accessibilité",
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(10.dp),
+                        "Activer Accessibilité HOSHI →",
+                        modifier = Modifier.padding(12.dp),
                         color = AppBoxThemeColors.Accent,
                         fontSize = 12.sp,
                     )
                 }
             }
+
+            Text("Hacker News", color = AppBoxThemeColors.TextPrimary, fontSize = 14.sp, modifier = Modifier.padding(top = 8.dp))
 
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(
@@ -138,30 +118,14 @@ fun HoshiConfigPanel(
                 )
             }
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text("Écoute continue HOSHI", color = AppBoxThemeColors.TextSecondary, fontSize = 12.sp)
-                Switch(
-                    checked = config.voiceContinuous,
-                    onCheckedChange = { onConfigChange(config.copy(voiceContinuous = it)) },
-                )
-            }
-
             Spacer(modifier = Modifier.height(4.dp))
             AppBoxPanel(
                 cornerRadius = 10.dp,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable(onClick = onSave),
+                modifier = Modifier.fillMaxWidth().clickable(onClick = onSave),
             ) {
                 Text(
-                    "Enregistrer la configuration",
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(12.dp),
+                    "Enregistrer",
+                    modifier = Modifier.padding(12.dp),
                     color = AppBoxThemeColors.Accent,
                     fontSize = 13.sp,
                 )

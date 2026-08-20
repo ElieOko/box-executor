@@ -4,9 +4,11 @@ import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
 import android.content.Intent
 import android.graphics.Path
+import android.graphics.Rect
 import android.os.Build
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -36,53 +38,74 @@ class HoshiAccessibilityService : AccessibilityService() {
 
         fun isEnabled(): Boolean = instance != null
 
-        suspend fun sendWhatsAppMessage(timeoutMs: Long = 8000): Result<Unit> = runCatching {
+        private val SEND_VIEW_IDS = listOf(
+            "com.whatsapp:id/send",
+            "com.whatsapp:id/conversation_entry_action_button",
+            "com.whatsapp.w4b:id/send",
+            "com.whatsapp.w4b:id/conversation_entry_action_button",
+        )
+
+        suspend fun sendWhatsAppMessage(timeoutMs: Long = 20_000): Result<Unit> = runCatching {
             val service = instance ?: throw IllegalStateException(
-                "Service Accessibilité HOSHI non activé — Paramètres → Accessibilité → HOSHI",
+                "Activez HOSHI dans Paramètres → Accessibilité pour l'envoi automatique WhatsApp",
             )
-            service.performWhatsAppSend(timeoutMs)
+            val deadline = System.currentTimeMillis() + timeoutMs
+            var lastError = "Bouton envoyer introuvable"
+            while (System.currentTimeMillis() < deadline) {
+                val result = service.tryTapSendButton()
+                if (result.isSuccess) return@runCatching
+                lastError = result.exceptionOrNull()?.message ?: lastError
+                delay(600)
+            }
+            throw IllegalStateException(lastError)
         }
     }
 
-    private fun performWhatsAppSend(timeoutMs: Long) {
+    private fun tryTapSendButton(): Result<Unit> = runCatching {
         val root = rootInActiveWindow ?: throw IllegalStateException("Fenêtre WhatsApp introuvable")
         try {
             val sendNode = findSendButton(root)
-                ?: throw IllegalStateException("Bouton envoyer WhatsApp introuvable")
+                ?: throw IllegalStateException("Bouton envoyer introuvable")
 
-            if (!sendNode.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                    val rect = android.graphics.Rect()
-                    sendNode.getBoundsInScreen(rect)
+            val clicked = sendNode.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+            if (!clicked && Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                val rect = Rect()
+                sendNode.getBoundsInScreen(rect)
+                if (rect.width() > 0 && rect.height() > 0) {
                     tap(rect.centerX().toFloat(), rect.centerY().toFloat())
                 } else {
-                    throw IllegalStateException("Impossible de cliquer sur envoyer")
+                    throw IllegalStateException("Zone envoyer invalide")
                 }
+            } else if (!clicked) {
+                throw IllegalStateException("Impossible de cliquer sur envoyer")
             }
-            Thread.sleep(500)
         } finally {
+            @Suppress("DEPRECATION")
             root.recycle()
         }
     }
 
     private fun findSendButton(root: AccessibilityNodeInfo): AccessibilityNodeInfo? {
-        val byId = root.findAccessibilityNodeInfosByViewId("com.whatsapp:id/send")
-        if (!byId.isNullOrEmpty()) return byId.first()
+        for (viewId in SEND_VIEW_IDS) {
+            val nodes = root.findAccessibilityNodeInfosByViewId(viewId)
+            if (!nodes.isNullOrEmpty()) {
+                val enabled = nodes.firstOrNull { it.isEnabled && it.isVisibleToUser }
+                if (enabled != null) return enabled
+                return nodes.first()
+            }
+        }
 
-        val byDesc = root.findAccessibilityNodeInfosByText("Envoyer")
-        if (!byDesc.isNullOrEmpty()) return byDesc.first()
-
-        val byDescEn = root.findAccessibilityNodeInfosByText("Send")
-        if (!byDescEn.isNullOrEmpty()) return byDescEn.first()
+        listOf("Envoyer", "Send", "Send message").forEach { label ->
+            val nodes = root.findAccessibilityNodeInfosByText(label)
+            val match = nodes?.firstOrNull { it.isClickable && it.isEnabled }
+            if (match != null) return match
+        }
 
         return findNodeRecursive(root) { node ->
-            val cls = node.className?.toString() ?: ""
+            val id = node.viewIdResourceName?.lowercase() ?: ""
             val desc = node.contentDescription?.toString()?.lowercase() ?: ""
-            node.isClickable && (
-                cls.contains("ImageButton") || cls.contains("Button")
-                ) && (
-                desc.contains("send") || desc.contains("envoyer") ||
-                    node.viewIdResourceName?.contains("send") == true
+            node.isClickable && node.isEnabled && (
+                id.contains("send") || desc.contains("send") || desc.contains("envoyer")
                 )
         }
     }
@@ -104,7 +127,7 @@ class HoshiAccessibilityService : AccessibilityService() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return
         val path = Path().apply { moveTo(x, y) }
         val gesture = GestureDescription.Builder()
-            .addStroke(GestureDescription.StrokeDescription(path, 0, 50))
+            .addStroke(GestureDescription.StrokeDescription(path, 0, 80))
             .build()
         dispatchGesture(gesture, null, null)
     }

@@ -43,7 +43,7 @@ class HoshiPreferencesStore(private val context: Context) {
             whatsappMessage = prefs[Keys.message] ?: "Message automatique HOSHI à {{time}}",
             whatsappHour = prefs[Keys.waHour] ?: 18,
             whatsappMinute = prefs[Keys.waMinute] ?: 0,
-            whatsappAutoSend = prefs[Keys.waAutoSend] ?: false,
+            whatsappAutoSend = prefs[Keys.waAutoSend] ?: true,
             hnHour = prefs[Keys.hnHour] ?: 8,
             hnMinute = prefs[Keys.hnMinute] ?: 0,
             voiceContinuous = prefs[Keys.voiceContinuous] ?: true,
