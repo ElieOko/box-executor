@@ -8,7 +8,7 @@ data class HoshiUserConfig(
     val whatsappMessage: String = "Message automatique HOSHI à {{time}}",
     val whatsappHour: Int = 18,
     val whatsappMinute: Int = 0,
-    val whatsappAutoSend: Boolean = false,
+    val whatsappAutoSend: Boolean = true,
     val hnHour: Int = 8,
     val hnMinute: Int = 0,
     val voiceContinuous: Boolean = true,

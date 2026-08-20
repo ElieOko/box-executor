@@ -38,6 +38,7 @@ enum class OsScreen {
     PERMISSIONS,
     MONITOR,
     AGENT,
+    FLOWS,
     APP_PICKER,
 }
 
@@ -64,18 +65,11 @@ data class RuntimeUiState(
     val schedules: List<ScheduledTask> = emptyList(),
     val workflowRuns: List<WorkflowRun> = emptyList(),
     val agentLogs: List<AgentLogEntry> = emptyList(),
-    val isVoiceListening: Boolean = false,
     val lastVoiceText: String? = null,
     val hoshiConfig: HoshiUserConfig = HoshiUserConfig(),
     val workflowEditMode: Boolean = false,
     val accessibilityEnabled: Boolean = false,
-    val hoshiAgentTab: HoshiAgentTab = HoshiAgentTab.FLOWS,
 )
-
-enum class HoshiAgentTab {
-    CONFIG,
-    FLOWS,
-}
 
 class RuntimeViewModel(
     private val container: RuntimeContainer,
@@ -160,9 +154,11 @@ class RuntimeViewModel(
         if (screen == OsScreen.APP_PICKER || screen == OsScreen.LIBRARY) {
             loadInstalledCandidates()
         }
-        if (screen == OsScreen.AGENT) {
+        if (screen == OsScreen.AGENT || screen == OsScreen.FLOWS) {
             refreshAgentData()
-            ensureHoshiVoiceActive()
+        }
+        if (screen == OsScreen.AGENT) {
+            container.voiceService.startContinuousListening()
         }
     }
 
@@ -351,24 +347,8 @@ class RuntimeViewModel(
                 _uiState.update { it.copy(accessibilityEnabled = enabled) }
             }
         }
-        viewModelScope.launch {
-            val voice = container.voiceService as? com.appbox.runtime.service.voice.VoiceService
-            voice?.listeningState?.collect { listening ->
-                _uiState.update { it.copy(isVoiceListening = listening) }
-            }
-        }
+        container.voiceService.startContinuousListening()
         refreshAgentData()
-    }
-
-    fun ensureHoshiVoiceActive() {
-        if (_uiState.value.hoshiConfig.voiceContinuous) {
-            container.voiceService.startContinuousListening()
-            _uiState.update { it.copy(isVoiceListening = true) }
-        }
-    }
-
-    fun setHoshiAgentTab(tab: HoshiAgentTab) {
-        _uiState.update { it.copy(hoshiAgentTab = tab) }
     }
 
     fun updateHoshiConfig(config: HoshiUserConfig) {
@@ -380,11 +360,7 @@ class RuntimeViewModel(
             val config = _uiState.value.hoshiConfig
             container.automationAgent.saveUserConfig(config)
                 .onSuccess {
-                    if (config.voiceContinuous) {
-                        container.voiceService.startContinuousListening()
-                    } else {
-                        container.voiceService.stopContinuousListening()
-                    }
+                    container.voiceService.startContinuousListening()
                     refreshAgentData()
                     _uiState.update { it.copy(successMessage = "Configuration HOSHI enregistrée") }
                 }
@@ -445,23 +421,13 @@ class RuntimeViewModel(
         }
     }
 
-    fun startVoiceListening() {
-        container.voiceService.startContinuousListening()
-        _uiState.update { it.copy(isVoiceListening = true) }
-    }
-
-    fun stopVoiceListening() {
-        container.voiceService.stopContinuousListening()
-        _uiState.update { it.copy(isVoiceListening = false) }
-    }
-
     fun reloadAgentInstructions() {
         viewModelScope.launch {
             container.automationAgent.loadInstructionsFromAssets()
                 .onSuccess { file ->
                     container.automationAgent.applyInstructions(file)
                     refreshAgentData()
-                    _uiState.update { it.copy(successMessage = "Instructions agent rechargées") }
+                    _uiState.update { it.copy(successMessage = "Instructions HOSHI rechargées") }
                 }
                 .onFailure { e ->
                     _uiState.update { it.copy(error = e.message ?: "Erreur rechargement") }

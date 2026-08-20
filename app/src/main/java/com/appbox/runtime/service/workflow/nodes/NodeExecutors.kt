@@ -198,22 +198,17 @@ class WhatsAppSendAccessibilityNodeExecutor : WorkflowNodeExecutor {
     override val type = WorkflowNodeType.WHATSAPP_SEND_ACCESSIBILITY
 
     override suspend fun execute(node: WorkflowNode, context: WorkflowExecutionContext): NodeResult {
-        val autoSend = node.config["enabled"]?.toBooleanStrictOrNull()
-            ?: context.variables["whatsapp_auto_send"]?.toBooleanStrictOrNull()
-            ?: false
-        if (!autoSend) {
-            context.log("Envoi auto désactivé — validation manuelle")
-            return NodeResult.Continue
-        }
-        delay(1500)
+        // Attendre le chargement WhatsApp puis envoyer automatiquement via Accessibilité
+        val waitMs = node.config["waitMs"]?.toLongOrNull() ?: 2500L
+        delay(waitMs)
         return com.appbox.runtime.accessibility.HoshiAccessibilityService.sendWhatsAppMessage()
             .fold(
                 onSuccess = {
-                    context.log("WhatsApp envoyé via Accessibilité HOSHI")
+                    context.log("WhatsApp envoyé automatiquement par HOSHI")
                     NodeResult.Continue
                 },
                 onFailure = {
-                    NodeResult.Fail(it.message ?: "Échec envoi Accessibilité")
+                    NodeResult.Fail(it.message ?: "Échec envoi automatique WhatsApp")
                 },
             )
     }

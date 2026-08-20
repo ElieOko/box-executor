@@ -41,7 +41,7 @@
             "id": "n2b",
             "type": "WHATSAPP_SEND_ACCESSIBILITY",
             "label": "Envoi auto UI",
-            "config": { "enabled": "false" },
+            "config": { "enabled": "true", "waitMs": "2500" },
             "positionX": 720,
             "positionY": 100
           },

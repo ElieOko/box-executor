@@ -23,6 +23,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.util.Locale
 
+/**
+ * Écoute vocale HOSHI — toujours active en arrière-plan, sans bascule micro visible.
+ */
 class VoiceService(
     context: Context,
     private val onCommand: suspend (String) -> Unit,
@@ -35,21 +38,29 @@ class VoiceService(
     private var ttsReady = false
     private var isSpeaking = false
     private var continuousEnabled = true
+    private var restartPending = false
 
     private val _lastTranscript = MutableSharedFlow<String>(extraBufferCapacity = 16)
     override val lastTranscript: SharedFlow<String> = _lastTranscript.asSharedFlow()
 
-    private val _isListening = MutableStateFlow(false)
-    override val isListening: Boolean get() = _isListening.value
-    val listeningState: StateFlow<Boolean> = _isListening.asStateFlow()
+    /** Toujours true quand HOSHI est actif — pas de clignotement on/off dans l'UI */
+    private val _alwaysOn = MutableStateFlow(true)
+    val alwaysOn: StateFlow<Boolean> = _alwaysOn.asStateFlow()
+
+    override val isListening: Boolean get() = continuousEnabled
 
     init {
         if (SpeechRecognizer.isRecognitionAvailable(appContext)) {
-            speechRecognizer = SpeechRecognizer.createSpeechRecognizer(appContext).apply {
-                setRecognitionListener(createListener())
-            }
+            recreateRecognizer()
         }
         tts = TextToSpeech(appContext, this, "com.google.android.tts")
+    }
+
+    private fun recreateRecognizer() {
+        speechRecognizer?.destroy()
+        speechRecognizer = SpeechRecognizer.createSpeechRecognizer(appContext).apply {
+            setRecognitionListener(createListener())
+        }
     }
 
     override fun onInit(status: Int) {
@@ -59,20 +70,21 @@ class VoiceService(
         tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
             override fun onStart(utteranceId: String?) {
                 isSpeaking = true
-                stopListeningInternal()
+                pauseRecognition()
             }
 
             override fun onDone(utteranceId: String?) {
                 isSpeaking = false
-                if (continuousEnabled) scheduleRestart(delayMs = 400)
+                resumeRecognition()
             }
 
             @Deprecated("Deprecated in Java")
             override fun onError(utteranceId: String?) {
                 isSpeaking = false
-                if (continuousEnabled) scheduleRestart(delayMs = 400)
+                resumeRecognition()
             }
         })
+        if (continuousEnabled) scheduleListen(delayMs = 300)
     }
 
     private fun configureFrenchVoice() {
@@ -80,19 +92,11 @@ class VoiceService(
         engine.language = Locale.FRANCE
         engine.setSpeechRate(0.92f)
         engine.setPitch(1.02f)
-
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
-            val frenchVoice = engine.voices
-                ?.filter { voice ->
-                    voice.locale.language == "fr" &&
-                        !voice.isNetworkConnectionRequired
-                }
+            engine.voices
+                ?.filter { it.locale.language == "fr" }
                 ?.maxByOrNull { voiceQualityScore(it) }
-                ?: engine.voices
-                    ?.filter { it.locale.language == "fr" }
-                    ?.maxByOrNull { voiceQualityScore(it) }
-
-            frenchVoice?.let { engine.voice = it }
+                ?.let { engine.voice = it }
         }
     }
 
@@ -100,76 +104,80 @@ class VoiceService(
         var score = 0
         if (voice.quality >= Voice.QUALITY_HIGH) score += 10
         if (voice.locale.country.equals("FR", ignoreCase = true)) score += 5
-        if (!voice.isNetworkConnectionRequired) score += 3
         return score
     }
 
-    override fun startListening() {
-        continuousEnabled = true
-        beginListening()
-    }
+    override fun startListening() = startContinuousListening()
 
     override fun stopListening() {
         continuousEnabled = false
-        stopListeningInternal()
+        _alwaysOn.value = false
+        pauseRecognition()
     }
 
     override fun startContinuousListening() {
         continuousEnabled = true
-        if (!isSpeaking) beginListening()
+        _alwaysOn.value = true
+        if (!isSpeaking) scheduleListen(delayMs = 200)
     }
 
     override fun stopContinuousListening() {
-        continuousEnabled = false
-        stopListeningInternal()
+        stopListening()
     }
 
     override fun speak(text: String) {
         if (!ttsReady || text.isBlank()) return
-        val cleaned = text.trim()
-        tts?.speak(cleaned, TextToSpeech.QUEUE_FLUSH, null, "hoshi_${System.currentTimeMillis()}")
+        tts?.speak(text.trim(), TextToSpeech.QUEUE_FLUSH, null, "hoshi_${System.currentTimeMillis()}")
     }
 
-    override fun speakAsHoshi(text: String) {
-        speak(text)
-    }
+    override fun speakAsHoshi(text: String) = speak(text)
 
     fun release() {
         continuousEnabled = false
-        stopListeningInternal()
+        pauseRecognition()
         speechRecognizer?.destroy()
         tts?.stop()
         tts?.shutdown()
     }
 
-    private fun beginListening() {
-        val recognizer = speechRecognizer ?: return
-        if (_isListening.value || isSpeaking) return
-        _isListening.value = true
-        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE, "fr-FR")
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "fr-FR")
-            putExtra(RecognizerIntent.EXTRA_ONLY_RETURN_LANGUAGE_PREFERENCE, "fr-FR")
-            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
-            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
-            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 1200L)
-            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 1200L)
+    private fun scheduleListen(delayMs: Long) {
+        if (!continuousEnabled || restartPending || isSpeaking) return
+        restartPending = true
+        scope.launch {
+            delay(delayMs)
+            restartPending = false
+            if (continuousEnabled && !isSpeaking) startRecognitionCycle()
         }
-        recognizer.startListening(intent)
     }
 
-    private fun stopListeningInternal() {
-        _isListening.value = false
-        speechRecognizer?.stopListening()
+    private fun startRecognitionCycle() {
+        val recognizer = speechRecognizer ?: return
+        if (isSpeaking) return
+        try {
+            recognizer.cancel()
+            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE, "fr-FR")
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "fr-FR")
+                putExtra(RecognizerIntent.EXTRA_ONLY_RETURN_LANGUAGE_PREFERENCE, "fr-FR")
+                putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
+                putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
+                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 1500L)
+                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 1500L)
+            }
+            recognizer.startListening(intent)
+        } catch (_: Exception) {
+            recreateRecognizer()
+            scheduleListen(delayMs = 1000)
+        }
+    }
+
+    private fun pauseRecognition() {
         speechRecognizer?.cancel()
     }
 
-    private fun scheduleRestart(delayMs: Long) {
-        scope.launch {
-            delay(delayMs)
-            if (continuousEnabled && !isSpeaking) beginListening()
-        }
+    private fun resumeRecognition() {
+        if (continuousEnabled) scheduleListen(delayMs = 500)
     }
 
     private fun createListener() = object : RecognitionListener {
@@ -177,38 +185,30 @@ class VoiceService(
         override fun onBeginningOfSpeech() {}
         override fun onRmsChanged(rmsdB: Float) {}
         override fun onBufferReceived(buffer: ByteArray?) {}
-
-        override fun onEndOfSpeech() {
-            _isListening.value = false
-        }
+        override fun onEndOfSpeech() {}
+        override fun onPartialResults(partialResults: Bundle?) {}
 
         override fun onError(error: Int) {
-            _isListening.value = false
-            if (continuousEnabled && !isSpeaking) {
-                val backoff = if (error == SpeechRecognizer.ERROR_NO_MATCH) 300L else 800L
-                scheduleRestart(backoff)
+            if (!continuousEnabled || isSpeaking) return
+            when (error) {
+                SpeechRecognizer.ERROR_CLIENT -> recreateRecognizer()
             }
+            scheduleListen(delayMs = if (error == SpeechRecognizer.ERROR_NO_MATCH) 200L else 600L)
         }
 
         override fun onResults(results: Bundle?) {
-            _isListening.value = false
             val text = results
                 ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                 ?.firstOrNull()
                 ?.trim()
                 ?.lowercase(Locale.FRANCE)
-                ?: run {
-                    if (continuousEnabled) scheduleRestart(300)
-                    return
-                }
-            _lastTranscript.tryEmit(text)
-            scope.launch {
-                onCommand(text)
-                if (continuousEnabled && !isSpeaking) scheduleRestart(500)
+            if (!text.isNullOrBlank()) {
+                _lastTranscript.tryEmit(text)
+                scope.launch { onCommand(text) }
             }
+            if (continuousEnabled && !isSpeaking) scheduleListen(delayMs = 400)
         }
 
-        override fun onPartialResults(partialResults: Bundle?) {}
         override fun onEvent(eventType: Int, params: Bundle?) {}
     }
 }

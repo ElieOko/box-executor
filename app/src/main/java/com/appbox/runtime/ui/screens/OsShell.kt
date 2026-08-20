@@ -148,29 +148,23 @@ fun OsShell(
                         onRequestOverlay = viewModel::openOverlaySettings,
                     )
                     OsScreen.AGENT -> AgentScreen(
-                        agentState = uiState.agentState,
-                        workflows = uiState.workflows,
-                        selectedWorkflow = uiState.selectedWorkflow,
+                        lastVoiceText = uiState.lastVoiceText,
+                        hoshiConfig = uiState.hoshiConfig,
+                        accessibilityEnabled = uiState.accessibilityEnabled,
                         schedules = uiState.schedules,
                         runs = uiState.workflowRuns,
                         logs = uiState.agentLogs,
-                        isListening = uiState.isVoiceListening,
-                        lastVoiceText = uiState.lastVoiceText,
-                        hoshiConfig = uiState.hoshiConfig,
-                        workflowEditMode = uiState.workflowEditMode,
-                        accessibilityEnabled = uiState.accessibilityEnabled,
-                        agentTab = uiState.hoshiAgentTab,
-                        onSelectWorkflow = viewModel::selectWorkflow,
-                        onRunWorkflow = viewModel::runWorkflow,
-                        onToggleVoice = {
-                            if (uiState.isVoiceListening) viewModel.stopVoiceListening()
-                            else viewModel.startVoiceListening()
-                        },
                         onReloadInstructions = viewModel::reloadAgentInstructions,
                         onConfigChange = viewModel::updateHoshiConfig,
                         onSaveConfig = viewModel::saveHoshiConfig,
                         onOpenAccessibility = viewModel::openAccessibilitySettings,
-                        onTabChange = viewModel::setHoshiAgentTab,
+                    )
+                    OsScreen.FLOWS -> HoshiFlowsScreen(
+                        workflows = uiState.workflows,
+                        selectedWorkflow = uiState.selectedWorkflow,
+                        editMode = uiState.workflowEditMode,
+                        onSelectWorkflow = viewModel::selectWorkflow,
+                        onRunWorkflow = viewModel::runWorkflow,
                         onToggleEditMode = viewModel::toggleWorkflowEditMode,
                         onNodeMoved = viewModel::onWorkflowNodeMoved,
                     )
@@ -219,6 +213,7 @@ private fun AppBoxHeader(screen: OsScreen, appCount: Int, processCount: Int) {
         OsScreen.PERMISSIONS -> "Contrôle d'accès"
         OsScreen.MONITOR -> "Processus"
         OsScreen.AGENT -> "HOSHI"
+        OsScreen.FLOWS -> "Flows"
         OsScreen.APP_PICKER -> "Ajouter"
     }
 
@@ -266,8 +261,8 @@ private fun AppBoxTabBar(current: OsScreen, onNavigate: (OsScreen) -> Unit) {
     val tabs = listOf(
         OsScreen.HOME to "Accueil",
         OsScreen.LIBRARY to "Apps",
-        OsScreen.AGENT to "Agent",
-        OsScreen.PERMISSIONS to "Accès",
+        OsScreen.AGENT to "HOSHI",
+        OsScreen.FLOWS to "Flows",
         OsScreen.MONITOR to "Proc.",
     )
 

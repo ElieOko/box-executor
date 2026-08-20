@@ -82,9 +82,7 @@ class RuntimeContainer(application: Application) {
             scheduler.initialize()
             automationAgent.start()
             automationAgent.subscribeToEvents(eventBus)
-            if (hoshiPreferences.getConfig().voiceContinuous) {
-                voiceService.startContinuousListening()
-            }
+            voiceService.startContinuousListening()
         }
     }
 }
