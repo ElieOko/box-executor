@@ -35,6 +35,7 @@ class AutomationAgent(
     val workflowEngine: WorkflowEngine,
     val scheduler: SchedulerService,
     private val preferences: HoshiPreferencesStore,
+    private val openAiRouter: OpenAiIntentRouter = OpenAiIntentRouter(),
     private val onSpeak: (String) -> Unit,
 ) : AgentServiceContract {
 
@@ -156,6 +157,56 @@ class AutomationAgent(
             updatedAt = System.currentTimeMillis(),
         )
 
+        if (userConfig.openAiEnabled && userConfig.openAiApiKey.isNotBlank()) {
+            resolveWithOpenAi(file, normalized)?.let { return it }
+        }
+
+        return handleVoiceWithRules(file, normalized)
+    }
+
+    private suspend fun resolveWithOpenAi(
+        file: InstructionFile,
+        normalized: String,
+    ): Result<WorkflowRun?>? {
+        return openAiRouter.resolveIntent(
+            userText = normalized,
+            config = userConfig,
+            workflows = file.agent.workflows,
+            voiceCommands = file.agent.voiceCommands,
+        ).fold(
+            onSuccess = { intent ->
+                log(AgentLogLevel.INFO, "OpenAI → ${intent.action} ${intent.workflowId ?: ""}")
+                when {
+                    intent.isWorkflowAction() -> {
+                        intent.speak?.let { onSpeak(it) }
+                        handleCommand(
+                            AgentCommand(
+                                id = UUID.randomUUID().toString(),
+                                source = AgentCommandSource.VOICE,
+                                action = intent.workflowId!!,
+                                parameters = intent.parameters,
+                            ),
+                        )
+                    }
+                    intent.isSpeakOnly() -> {
+                        onSpeak(intent.speak!!)
+                        _state.value = _state.value.copy(status = AgentStatus.IDLE)
+                        Result.success(null)
+                    }
+                    else -> null
+                }
+            },
+            onFailure = { error ->
+                log(AgentLogLevel.ERROR, "OpenAI: ${error.message}")
+                null
+            },
+        )
+    }
+
+    private suspend fun handleVoiceWithRules(
+        file: InstructionFile,
+        normalized: String,
+    ): Result<WorkflowRun?> {
         matchReactiveExpression(file.agent.reactiveExpressions, normalized)?.let { reactive ->
             reactive.response?.let { onSpeak(it) }
             reactive.workflowId?.let { wfId ->

@@ -40,6 +40,7 @@ import java.util.Locale
 fun AgentScreen(
     lastVoiceText: String?,
     hoshiConfig: HoshiUserConfig,
+    openAiKeyConfigured: Boolean,
     accessibilityEnabled: Boolean,
     schedules: List<ScheduledTask>,
     runs: List<WorkflowRun>,
@@ -79,6 +80,7 @@ fun AgentScreen(
         ) {
             HoshiConfigPanel(
                 config = hoshiConfig,
+                openAiKeyConfigured = openAiKeyConfigured,
                 accessibilityEnabled = accessibilityEnabled,
                 onConfigChange = onConfigChange,
                 onSave = onSaveConfig,

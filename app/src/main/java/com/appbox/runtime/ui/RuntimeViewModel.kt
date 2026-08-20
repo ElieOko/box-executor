@@ -69,6 +69,7 @@ data class RuntimeUiState(
     val hoshiConfig: HoshiUserConfig = HoshiUserConfig(),
     val workflowEditMode: Boolean = false,
     val accessibilityEnabled: Boolean = false,
+    val openAiKeyConfigured: Boolean = false,
 )
 
 class RuntimeViewModel(
@@ -339,7 +340,12 @@ class RuntimeViewModel(
         }
         viewModelScope.launch {
             container.hoshiPreferences.configFlow.collect { config ->
-                _uiState.update { it.copy(hoshiConfig = config) }
+                _uiState.update {
+                    it.copy(
+                        hoshiConfig = config.copy(openAiApiKey = ""),
+                        openAiKeyConfigured = config.openAiApiKey.isNotBlank(),
+                    )
+                }
             }
         }
         viewModelScope.launch {
@@ -357,12 +363,24 @@ class RuntimeViewModel(
 
     fun saveHoshiConfig() {
         viewModelScope.launch {
-            val config = _uiState.value.hoshiConfig
+            val uiConfig = _uiState.value.hoshiConfig
+            val stored = container.hoshiPreferences.getConfig()
+            val config = if (uiConfig.openAiApiKey.isBlank()) {
+                uiConfig.copy(openAiApiKey = stored.openAiApiKey)
+            } else {
+                uiConfig
+            }
             container.automationAgent.saveUserConfig(config)
                 .onSuccess {
                     container.voiceService.startContinuousListening()
                     refreshAgentData()
-                    _uiState.update { it.copy(successMessage = "Configuration HOSHI enregistrée") }
+                    _uiState.update {
+                        it.copy(
+                            successMessage = "Configuration HOSHI enregistrée",
+                            openAiKeyConfigured = config.openAiApiKey.isNotBlank(),
+                            hoshiConfig = config.copy(openAiApiKey = ""),
+                        )
+                    }
                 }
                 .onFailure { e ->
                     _uiState.update { it.copy(error = e.message ?: "Erreur sauvegarde HOSHI") }

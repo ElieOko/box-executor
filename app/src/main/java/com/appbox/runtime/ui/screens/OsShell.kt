@@ -150,6 +150,7 @@ fun OsShell(
                     OsScreen.AGENT -> AgentScreen(
                         lastVoiceText = uiState.lastVoiceText,
                         hoshiConfig = uiState.hoshiConfig,
+                        openAiKeyConfigured = uiState.openAiKeyConfigured,
                         accessibilityEnabled = uiState.accessibilityEnabled,
                         schedules = uiState.schedules,
                         runs = uiState.workflowRuns,

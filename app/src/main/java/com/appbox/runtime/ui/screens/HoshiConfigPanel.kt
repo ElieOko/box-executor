@@ -10,10 +10,13 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.appbox.runtime.core.model.HoshiUserConfig
@@ -23,6 +26,7 @@ import com.appbox.runtime.ui.theme.AppBoxThemeColors
 @Composable
 fun HoshiConfigPanel(
     config: HoshiUserConfig,
+    openAiKeyConfigured: Boolean,
     accessibilityEnabled: Boolean,
     onConfigChange: (HoshiUserConfig) -> Unit,
     onSave: () -> Unit,
@@ -30,7 +34,48 @@ fun HoshiConfigPanel(
 ) {
     AppBoxPanel(cornerRadius = 14.dp, modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("WhatsApp planifié", color = AppBoxThemeColors.TextPrimary, fontSize = 14.sp)
+            Text("Intelligence OpenAI", color = AppBoxThemeColors.TextPrimary, fontSize = 14.sp)
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("Compréhension naturelle", color = AppBoxThemeColors.TextSecondary, fontSize = 12.sp)
+                Switch(
+                    checked = config.openAiEnabled,
+                    onCheckedChange = { onConfigChange(config.copy(openAiEnabled = it)) },
+                )
+            }
+
+            OutlinedTextField(
+                value = config.openAiApiKey,
+                onValueChange = { onConfigChange(config.copy(openAiApiKey = it.trim())) },
+                label = { Text("Clé API OpenAI") },
+                placeholder = {
+                    Text(if (openAiKeyConfigured) "Clé enregistrée — saisir pour remplacer" else "sk-proj-...")
+                },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                visualTransformation = PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+            )
+
+            OutlinedTextField(
+                value = config.openAiModel,
+                onValueChange = { onConfigChange(config.copy(openAiModel = it)) },
+                label = { Text("Modèle") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+            )
+
+            Text(
+                "La clé reste sur l'appareil. Ne la partagez jamais publiquement.",
+                color = AppBoxThemeColors.TextSecondary,
+                fontSize = 11.sp,
+            )
+
+            Text("WhatsApp planifié", color = AppBoxThemeColors.TextPrimary, fontSize = 14.sp, modifier = Modifier.padding(top = 8.dp))
 
             OutlinedTextField(
                 value = config.whatsappPhone,

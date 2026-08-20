@@ -35,6 +35,9 @@ class HoshiPreferencesStore(private val context: Context) {
         val hnMinute = intPreferencesKey("hn_minute")
         val voiceContinuous = booleanPreferencesKey("voice_continuous")
         val wakeWords = stringPreferencesKey("wake_words_json")
+        val openAiApiKey = stringPreferencesKey("openai_api_key")
+        val openAiModel = stringPreferencesKey("openai_model")
+        val openAiEnabled = booleanPreferencesKey("openai_enabled")
     }
 
     val configFlow: Flow<HoshiUserConfig> = context.hoshiPrefs.data.map { prefs ->
@@ -50,6 +53,9 @@ class HoshiPreferencesStore(private val context: Context) {
             wakeWords = prefs[Keys.wakeWords]?.let {
                 runCatching { json.decodeFromString<List<String>>(it) }.getOrDefault(defaultWakeWords())
             } ?: defaultWakeWords(),
+            openAiApiKey = prefs[Keys.openAiApiKey] ?: "",
+            openAiModel = prefs[Keys.openAiModel] ?: "gpt-4o-mini",
+            openAiEnabled = prefs[Keys.openAiEnabled] ?: true,
         )
     }
 
@@ -66,6 +72,11 @@ class HoshiPreferencesStore(private val context: Context) {
             prefs[Keys.hnMinute] = config.hnMinute
             prefs[Keys.voiceContinuous] = config.voiceContinuous
             prefs[Keys.wakeWords] = json.encodeToString(config.wakeWords)
+            if (config.openAiApiKey.isNotBlank()) {
+                prefs[Keys.openAiApiKey] = config.openAiApiKey
+            }
+            prefs[Keys.openAiModel] = config.openAiModel
+            prefs[Keys.openAiEnabled] = config.openAiEnabled
         }
     }
 
