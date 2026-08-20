@@ -52,6 +52,8 @@ class RuntimeContainer(application: Application) {
 
     private var speakCallback: (String) -> Unit = {}
 
+    val hoshiPreferences = com.appbox.runtime.service.agent.HoshiPreferencesStore(application)
+
     init {
         workflowEngine = WorkflowEngine(
             context = application,
@@ -65,6 +67,7 @@ class RuntimeContainer(application: Application) {
             context = application,
             workflowEngine = workflowEngine,
             scheduler = scheduler,
+            preferences = hoshiPreferences,
             onSpeak = { text -> speakCallback(text) },
         )
         voiceService = VoiceService(application) { transcript ->
@@ -79,6 +82,9 @@ class RuntimeContainer(application: Application) {
             scheduler.initialize()
             automationAgent.start()
             automationAgent.subscribeToEvents(eventBus)
+            if (hoshiPreferences.getConfig().voiceContinuous) {
+                voiceService.startContinuousListening()
+            }
         }
     }
 }

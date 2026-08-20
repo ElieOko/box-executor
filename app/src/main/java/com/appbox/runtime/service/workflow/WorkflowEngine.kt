@@ -59,6 +59,23 @@ class WorkflowEngine(
     override suspend fun getAllWorkflows(): List<WorkflowDefinition> =
         workflows.values.toList()
 
+    suspend fun updateNodePosition(
+        workflowId: String,
+        nodeId: String,
+        positionX: Float,
+        positionY: Float,
+    ): Result<Unit> = mutex.withLock {
+        runCatching {
+            val def = workflows[workflowId] ?: throw IllegalArgumentException("Workflow inconnu")
+            val updatedNodes = def.nodes.map { node ->
+                if (node.id == nodeId) node.copy(positionX = positionX, positionY = positionY) else node
+            }
+            val updated = def.copy(nodes = updatedNodes)
+            workflows[workflowId] = updated
+            store.saveWorkflows(workflows.values.toList())
+        }
+    }
+
     override suspend fun execute(
         workflowId: String,
         initialContext: Map<String, String>,

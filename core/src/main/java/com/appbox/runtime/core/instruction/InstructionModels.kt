@@ -21,7 +21,18 @@ data class AgentInstructionBlock(
     val workflows: List<WorkflowDefinition> = emptyList(),
     val schedules: List<ScheduledTask> = emptyList(),
     val voiceCommands: List<VoiceCommandMapping> = emptyList(),
+    val reactiveExpressions: List<ReactiveExpressionMapping> = emptyList(),
     val eventTriggers: List<EventTriggerMapping> = emptyList(),
+)
+
+@Serializable
+data class ReactiveExpressionMapping(
+    val patterns: List<String>,
+    /** Réponse vocale HOSHI (sans workflow) */
+    val response: String? = null,
+    /** Workflow à exécuter si défini */
+    val workflowId: String? = null,
+    val parameters: Map<String, String> = emptyMap(),
 )
 
 @Serializable

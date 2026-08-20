@@ -22,6 +22,7 @@ import com.appbox.runtime.core.model.RuntimePermission
 import com.appbox.runtime.core.model.AgentLogEntry
 import com.appbox.runtime.core.model.AgentState
 import com.appbox.runtime.core.model.ScheduledTask
+import com.appbox.runtime.core.model.HoshiUserConfig
 import com.appbox.runtime.core.model.WorkflowDefinition
 import com.appbox.runtime.core.model.WorkflowRun
 import com.appbox.runtime.core.model.TrackedProcess
@@ -65,7 +66,16 @@ data class RuntimeUiState(
     val agentLogs: List<AgentLogEntry> = emptyList(),
     val isVoiceListening: Boolean = false,
     val lastVoiceText: String? = null,
+    val hoshiConfig: HoshiUserConfig = HoshiUserConfig(),
+    val workflowEditMode: Boolean = false,
+    val accessibilityEnabled: Boolean = false,
+    val hoshiAgentTab: HoshiAgentTab = HoshiAgentTab.FLOWS,
 )
+
+enum class HoshiAgentTab {
+    CONFIG,
+    FLOWS,
+}
 
 class RuntimeViewModel(
     private val container: RuntimeContainer,
@@ -152,6 +162,7 @@ class RuntimeViewModel(
         }
         if (screen == OsScreen.AGENT) {
             refreshAgentData()
+            ensureHoshiVoiceActive()
         }
     }
 
@@ -312,7 +323,7 @@ class RuntimeViewModel(
     private fun observeAgent() {
         viewModelScope.launch {
             container.automationAgent.state().collect { state ->
-                _uiState.update { it.copy(agentState = state) }
+                _uiState.update { it.copy(agentState = state.copy(name = "HOSHI")) }
             }
         }
         viewModelScope.launch {
@@ -330,7 +341,79 @@ class RuntimeViewModel(
                 _uiState.update { it.copy(lastVoiceText = text) }
             }
         }
+        viewModelScope.launch {
+            container.hoshiPreferences.configFlow.collect { config ->
+                _uiState.update { it.copy(hoshiConfig = config) }
+            }
+        }
+        viewModelScope.launch {
+            com.appbox.runtime.accessibility.HoshiAccessibilityService.isConnected.collect { enabled ->
+                _uiState.update { it.copy(accessibilityEnabled = enabled) }
+            }
+        }
+        viewModelScope.launch {
+            val voice = container.voiceService as? com.appbox.runtime.service.voice.VoiceService
+            voice?.listeningState?.collect { listening ->
+                _uiState.update { it.copy(isVoiceListening = listening) }
+            }
+        }
         refreshAgentData()
+    }
+
+    fun ensureHoshiVoiceActive() {
+        if (_uiState.value.hoshiConfig.voiceContinuous) {
+            container.voiceService.startContinuousListening()
+            _uiState.update { it.copy(isVoiceListening = true) }
+        }
+    }
+
+    fun setHoshiAgentTab(tab: HoshiAgentTab) {
+        _uiState.update { it.copy(hoshiAgentTab = tab) }
+    }
+
+    fun updateHoshiConfig(config: HoshiUserConfig) {
+        _uiState.update { it.copy(hoshiConfig = config) }
+    }
+
+    fun saveHoshiConfig() {
+        viewModelScope.launch {
+            val config = _uiState.value.hoshiConfig
+            container.automationAgent.saveUserConfig(config)
+                .onSuccess {
+                    if (config.voiceContinuous) {
+                        container.voiceService.startContinuousListening()
+                    } else {
+                        container.voiceService.stopContinuousListening()
+                    }
+                    refreshAgentData()
+                    _uiState.update { it.copy(successMessage = "Configuration HOSHI enregistrée") }
+                }
+                .onFailure { e ->
+                    _uiState.update { it.copy(error = e.message ?: "Erreur sauvegarde HOSHI") }
+                }
+        }
+    }
+
+    fun toggleWorkflowEditMode() {
+        _uiState.update { it.copy(workflowEditMode = !it.workflowEditMode) }
+    }
+
+    fun onWorkflowNodeMoved(nodeId: String, x: Float, y: Float) {
+        val workflow = _uiState.value.selectedWorkflow ?: return
+        viewModelScope.launch {
+            container.workflowEngine.updateNodePosition(workflow.id, nodeId, x, y)
+            val updated = container.workflowEngine.getWorkflow(workflow.id)
+            _uiState.update { state ->
+                state.copy(
+                    selectedWorkflow = updated,
+                    workflows = state.workflows.map { if (it.id == workflow.id) updated ?: it else it },
+                )
+            }
+        }
+    }
+
+    fun openAccessibilitySettings() {
+        com.appbox.runtime.accessibility.AccessibilitySettingsHelper.openSettings(appContext)
     }
 
     fun refreshAgentData() {
@@ -363,12 +446,12 @@ class RuntimeViewModel(
     }
 
     fun startVoiceListening() {
-        container.voiceService.startListening()
+        container.voiceService.startContinuousListening()
         _uiState.update { it.copy(isVoiceListening = true) }
     }
 
     fun stopVoiceListening() {
-        container.voiceService.stopListening()
+        container.voiceService.stopContinuousListening()
         _uiState.update { it.copy(isVoiceListening = false) }
     }
 

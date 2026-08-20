@@ -1,6 +1,6 @@
-# AppBox Super Agent — Automatisation
+# HOSHI — Agent d'automatisation AppBox
 
-AppBox Runtime inclut un **Super Agent** : couche d'exécution **et** moteur d'automatisation déclaratif (style n8n).
+**HOSHI** est l'agent vocal réactif d'AppBox Runtime : workflows n8n, WhatsApp planifié, digest Hacker News, automatisation UI.
 
 ## Capacités
 
