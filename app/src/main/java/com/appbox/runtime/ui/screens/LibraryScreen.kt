@@ -29,12 +29,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.appbox.runtime.core.model.AppBoxApp
 import com.appbox.runtime.core.model.AppLifecycleState
+import com.appbox.runtime.ui.components.AppBoxPanel
 import com.appbox.runtime.ui.components.AppIcon
-import com.appbox.runtime.ui.components.GlassSurface
-import com.appbox.runtime.ui.components.StatusDot
-import com.appbox.runtime.ui.theme.OsColors
+import com.appbox.runtime.ui.components.StatusIndicator
+import com.appbox.runtime.ui.theme.AppBoxThemeColors
 
 @Composable
 fun LibraryScreen(
@@ -49,47 +50,34 @@ fun LibraryScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Column {
-                Text(
-                    text = "Bibliothèque",
-                    style = MaterialTheme.typography.headlineMedium,
-                    color = OsColors.TextPrimary,
-                )
-                Text(
-                    text = "${apps.size} application(s) dans l'écosystème",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = OsColors.TextSecondary,
-                )
-            }
-            GlassSurface(cornerRadius = 16.dp, modifier = Modifier.clickable(onClick = onAddApp)) {
+            Text(
+                text = "${apps.size} application(s)",
+                color = AppBoxThemeColors.TextSecondary,
+                fontSize = 14.sp,
+            )
+            AppBoxPanel(cornerRadius = 10.dp, modifier = Modifier.clickable(onClick = onAddApp)) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Icon(Icons.Default.Add, null, tint = OsColors.AccentCyan, modifier = Modifier.size(18.dp))
+                    Icon(Icons.Default.Add, null, tint = AppBoxThemeColors.Accent, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("Ajouter", color = OsColors.AccentCyan, fontWeight = FontWeight.Medium)
+                    Text("Ajouter", color = AppBoxThemeColors.Accent, fontWeight = FontWeight.Medium, fontSize = 13.sp)
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(12.dp))
 
-        GlassSurface(
-            modifier = Modifier.fillMaxSize(),
-            cornerRadius = 28.dp,
-        ) {
+        AppBoxPanel(modifier = Modifier.fillMaxSize(), cornerRadius = 20.dp) {
             if (apps.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("Aucune app enregistrée", color = OsColors.TextSecondary)
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("Aucune application", color = AppBoxThemeColors.TextSecondary)
                 }
             } else {
-                LazyColumn(
-                    contentPadding = PaddingValues(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
+                LazyColumn(contentPadding = PaddingValues(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(apps, key = { it.packageName }) { app ->
-                        LibraryAppRow(
+                        LibraryRow(
                             app = app,
                             onLaunch = { onLaunchApp(app.packageName) },
                             onRemove = { onRemoveApp(app.packageName) },
@@ -102,63 +90,29 @@ fun LibraryScreen(
 }
 
 @Composable
-private fun LibraryAppRow(
-    app: AppBoxApp,
-    onLaunch: () -> Unit,
-    onRemove: () -> Unit,
-) {
-    GlassSurface(cornerRadius = 18.dp, backgroundAlpha = 0.1f, modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            AppIcon(
-                packageName = app.packageName,
-                drawable = null,
-                modifier = Modifier.size(48.dp),
-                size = 48.dp,
-            )
-            Spacer(modifier = Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = app.displayName,
-                    color = OsColors.TextPrimary,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    text = app.packageName,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = OsColors.TextMuted,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    StatusDot(
-                        color = when (app.state) {
-                            AppLifecycleState.ACTIVE -> OsColors.StatusActive
-                            AppLifecycleState.SUSPENDED -> OsColors.StatusSuspended
-                            else -> OsColors.StatusStopped
-                        },
-                        modifier = Modifier.size(7.dp),
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = app.state.name,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = OsColors.TextSecondary,
-                    )
-                }
+private fun LibraryRow(app: AppBoxApp, onLaunch: () -> Unit, onRemove: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 4.dp, vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        AppIcon(packageName = app.packageName, drawable = null, size = 44.dp)
+        Spacer(modifier = Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(app.displayName, color = AppBoxThemeColors.TextPrimary, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(app.packageName, color = AppBoxThemeColors.TextTertiary, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                StatusIndicator(active = app.state == AppLifecycleState.ACTIVE)
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(app.state.name, color = AppBoxThemeColors.TextSecondary, fontSize = 11.sp)
             }
-            IconButton(onClick = onLaunch) {
-                Icon(Icons.Default.PlayArrow, contentDescription = "Lancer", tint = OsColors.AccentCyan)
-            }
-            IconButton(onClick = onRemove) {
-                Icon(Icons.Default.Delete, contentDescription = "Retirer", tint = OsColors.StatusStopped)
-            }
+        }
+        IconButton(onClick = onLaunch) {
+            Icon(Icons.Default.PlayArrow, "Lancer", tint = AppBoxThemeColors.Accent)
+        }
+        IconButton(onClick = onRemove) {
+            Icon(Icons.Default.Delete, "Retirer", tint = AppBoxThemeColors.Error)
         }
     }
 }
