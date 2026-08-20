@@ -21,6 +21,7 @@ class AppRegistry(
 
     private val mutex = Mutex()
     private val apps = mutableMapOf<String, AppBoxApp>()
+    private val store = AppRegistryStore(context)
 
     private val trustedApps = listOf(
         TrustedApp(
@@ -31,17 +32,31 @@ class AppRegistry(
         ),
     )
 
+    suspend fun initialize() {
+        mutex.withLock {
+            apps.clear()
+            store.loadApps().forEach { app ->
+                apps[app.packageName] = app
+            }
+        }
+    }
+
     override suspend fun registerApp(app: AppBoxApp): Result<AppBoxApp> = mutex.withLock {
         runCatching {
             val signatureHash = resolveSignatureHash(app.packageName)
             val trusted = trustedApps.find { it.packageName == app.packageName }
             val registered = app.copy(
                 signatureHash = signatureHash,
-                permissions = trusted?.defaultPermissions ?: app.permissions,
+                permissions = when {
+                    trusted != null -> trusted.defaultPermissions
+                    app.permissions.isNotEmpty() -> app.permissions
+                    else -> defaultUserPermissions
+                },
                 state = AppLifecycleState.ACTIVE,
                 lastActiveAt = System.currentTimeMillis(),
             )
             apps[app.packageName] = registered
+            persistLocked()
             remoteMonitor.report(
                 RemoteMonitorEvent(
                     type = MonitorEventType.APP_REGISTERED,
@@ -56,13 +71,15 @@ class AppRegistry(
     override suspend fun unregisterApp(packageName: String): Result<Unit> = mutex.withLock {
         runCatching {
             apps.remove(packageName)
+            persistLocked()
             remoteMonitor.report(
                 RemoteMonitorEvent(
                     type = MonitorEventType.APP_UNREGISTERED,
                     packageName = packageName,
-                    message = "App unregistered",
+                    message = "App removed from AppBox",
                 ),
             )
+            Unit
         }
     }
 
@@ -71,7 +88,7 @@ class AppRegistry(
     }
 
     override suspend fun getAllApps(): List<AppBoxApp> = mutex.withLock {
-        apps.values.toList()
+        apps.values.sortedBy { it.displayName.lowercase() }
     }
 
     override suspend fun updateAppState(
@@ -82,8 +99,13 @@ class AppRegistry(
             val app = apps[packageName] ?: throw IllegalArgumentException("App not found: $packageName")
             apps[packageName] = app.copy(
                 state = state,
-                lastActiveAt = if (state == AppLifecycleState.ACTIVE) System.currentTimeMillis() else app.lastActiveAt,
+                lastActiveAt = if (state == AppLifecycleState.ACTIVE) {
+                    System.currentTimeMillis()
+                } else {
+                    app.lastActiveAt
+                },
             )
+            persistLocked()
             remoteMonitor.report(
                 RemoteMonitorEvent(
                     type = MonitorEventType.APP_STATE_CHANGED,
@@ -91,8 +113,19 @@ class AppRegistry(
                     message = "State changed to $state",
                 ),
             )
+            Unit
         }
     }
+
+    suspend fun updateAppPermissions(packageName: String, permissions: Set<RuntimePermission>): Result<Unit> =
+        mutex.withLock {
+            runCatching {
+                val app = apps[packageName] ?: throw IllegalArgumentException("App not found: $packageName")
+                apps[packageName] = app.copy(permissions = permissions)
+                persistLocked()
+                Unit
+            }
+        }
 
     suspend fun registerFromPackage(packageName: String): Result<AppBoxApp> {
         val pm = context.packageManager
@@ -107,6 +140,7 @@ class AppRegistry(
                     versionName = info.versionName ?: "unknown",
                     versionCode = info.longVersionCode,
                     signatureHash = resolveSignatureHash(packageName),
+                    permissions = defaultUserPermissions,
                 ),
             ).getOrThrow()
         }
@@ -132,5 +166,21 @@ class AppRegistry(
         val hash = resolveSignatureHash(packageName)
         return trustedApps.any { it.packageName == packageName && it.signatureHash == hash } ||
             trustedApps.any { it.packageName == packageName && it.signatureHash != "runtime_self" }
+    }
+
+    private suspend fun persistLocked() {
+        store.saveApps(apps.values.toList())
+    }
+
+    companion object {
+        val defaultUserPermissions = setOf(
+            RuntimePermission.STORAGE_READ,
+            RuntimePermission.STORAGE_WRITE,
+            RuntimePermission.EVENTS_PUBLISH,
+            RuntimePermission.EVENTS_SUBSCRIBE,
+            RuntimePermission.NOTIFICATIONS_POST,
+            RuntimePermission.AUTH_READ,
+            RuntimePermission.INTER_APP_CALL,
+        )
     }
 }

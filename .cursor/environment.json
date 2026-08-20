@@ -1,0 +1,4 @@
+{
+  "name": "AppBox Runtime Android",
+  "install": "export ANDROID_HOME=\"$HOME/android-sdk\" && mkdir -p \"$ANDROID_HOME/cmdline-tools\" && if [ ! -x \"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager\" ]; then cd /tmp && curl -fsSL -o cmdline-tools.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip && unzip -qo cmdline-tools.zip && rm -rf \"$ANDROID_HOME/cmdline-tools/latest\" && mv cmdline-tools \"$ANDROID_HOME/cmdline-tools/latest\"; fi && yes | \"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager\" --sdk_root=\"$ANDROID_HOME\" \"platform-tools\" \"platforms;android-36\" \"build-tools;36.0.0\" && echo \"sdk.dir=$ANDROID_HOME\" > local.properties && ./gradlew assembleDebug test"
+}

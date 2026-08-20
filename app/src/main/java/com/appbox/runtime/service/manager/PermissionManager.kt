@@ -24,6 +24,7 @@ class PermissionManager(
                     ?: throw IllegalArgumentException("App not registered: $packageName")
                 val current = overrides.getOrPut(packageName) { app.permissions.toMutableSet() }
                 current.add(permission)
+                syncPermissions(packageName, current)
                 remoteMonitor.report(
                     RemoteMonitorEvent(
                         type = MonitorEventType.PERMISSION_CHANGED,
@@ -31,6 +32,7 @@ class PermissionManager(
                         message = "Granted $permission",
                     ),
                 )
+                Unit
             }
         }
 
@@ -41,6 +43,7 @@ class PermissionManager(
                     ?: throw IllegalArgumentException("App not registered: $packageName")
                 val current = overrides.getOrPut(packageName) { app.permissions.toMutableSet() }
                 current.remove(permission)
+                syncPermissions(packageName, current)
                 remoteMonitor.report(
                     RemoteMonitorEvent(
                         type = MonitorEventType.PERMISSION_CHANGED,
@@ -48,6 +51,7 @@ class PermissionManager(
                         message = "Revoked $permission",
                     ),
                 )
+                Unit
             }
         }
 
@@ -60,5 +64,11 @@ class PermissionManager(
     override suspend fun getPermissions(packageName: String): Set<RuntimePermission> {
         val app = appRegistry.getApp(packageName) ?: return emptySet()
         return overrides[packageName] ?: app.permissions
+    }
+
+    private suspend fun syncPermissions(packageName: String, permissions: Set<RuntimePermission>) {
+        if (appRegistry is AppRegistry) {
+            appRegistry.updateAppPermissions(packageName, permissions)
+        }
     }
 }
