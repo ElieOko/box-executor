@@ -1,25 +1,27 @@
 package com.appbox.runtime.ui
 
 import android.content.Context
+import android.content.Intent
+import android.provider.Settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.appbox.runtime.container.AppBoxSessionActivity
+import com.appbox.runtime.container.ProcessTracker
 import com.appbox.runtime.core.model.AppBoxApp
 import com.appbox.runtime.core.model.AppLifecycleState
 import com.appbox.runtime.core.model.RemoteMonitorEvent
 import com.appbox.runtime.core.model.RuntimePermission
+import com.appbox.runtime.core.model.TrackedProcess
+import com.appbox.runtime.service.ProcessWatchdogService
 import com.appbox.runtime.service.RuntimeContainer
 import com.appbox.runtime.service.manager.AppRegistry
 import com.appbox.runtime.service.manager.InstalledAppCandidate
 import com.appbox.runtime.service.manager.InstalledAppScanner
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 enum class OsScreen {
     HOME,
@@ -35,8 +37,9 @@ data class RuntimeUiState(
     val installedCandidates: List<InstalledAppCandidate> = emptyList(),
     val appPickerQuery: String = "",
     val monitorEvents: List<RemoteMonitorEvent> = emptyList(),
+    val trackedProcesses: List<TrackedProcess> = emptyList(),
+    val hasUsageAccess: Boolean = false,
     val currentScreen: OsScreen = OsScreen.HOME,
-    val currentTime: String = "",
     val appPermissions: Set<RuntimePermission> = emptySet(),
     val isLoadingPicker: Boolean = false,
     val successMessage: String? = null,
@@ -50,6 +53,7 @@ class RuntimeViewModel(
 
     private val scanner: InstalledAppScanner = container.installedAppScanner
     private val appRegistry: AppRegistry = container.appRegistry as AppRegistry
+    private val processTracker = ProcessTracker(appContext)
 
     private val _uiState = MutableStateFlow(RuntimeUiState())
     val uiState: StateFlow<RuntimeUiState> = _uiState.asStateFlow()
@@ -57,7 +61,8 @@ class RuntimeViewModel(
     init {
         refreshApps()
         observeMonitorEvents()
-        startClock()
+        observeProcesses()
+        refreshUsageAccess()
     }
 
     fun refreshApps() {
@@ -84,13 +89,9 @@ class RuntimeViewModel(
         }
     }
 
-    fun openAppPicker() {
-        navigateTo(OsScreen.APP_PICKER)
-    }
+    fun openAppPicker() = navigateTo(OsScreen.APP_PICKER)
 
-    fun closeAppPicker() {
-        navigateTo(OsScreen.HOME)
-    }
+    fun closeAppPicker() = navigateTo(OsScreen.HOME)
 
     fun updateAppPickerQuery(query: String) {
         _uiState.update { it.copy(appPickerQuery = query) }
@@ -101,10 +102,7 @@ class RuntimeViewModel(
             _uiState.update { it.copy(isLoadingPicker = true) }
             val candidates = scanner.scanLaunchableApps()
             _uiState.update {
-                it.copy(
-                    installedCandidates = candidates,
-                    isLoadingPicker = false,
-                )
+                it.copy(installedCandidates = candidates, isLoadingPicker = false)
             }
         }
     }
@@ -113,20 +111,17 @@ class RuntimeViewModel(
         viewModelScope.launch {
             appRegistry.registerFromPackage(packageName)
                 .onSuccess { app ->
-                    _uiState.update {
-                        it.copy(successMessage = "${app.displayName} ajoutée à AppBox")
-                    }
+                    _uiState.update { it.copy(successMessage = "${app.displayName} ajoutée") }
                     refreshApps()
                     loadInstalledCandidates()
                 }
-                .onFailure { e ->
-                    _uiState.update { it.copy(error = e.message) }
-                }
+                .onFailure { e -> _uiState.update { it.copy(error = e.message) } }
         }
     }
 
     fun removeApp(packageName: String) {
         viewModelScope.launch {
+            processTracker.stopProcess(packageName)
             container.appRegistry.unregisterApp(packageName)
                 .onSuccess {
                     if (_uiState.value.selectedApp?.packageName == packageName) {
@@ -135,24 +130,28 @@ class RuntimeViewModel(
                     refreshApps()
                     loadInstalledCandidates()
                 }
-                .onFailure { e ->
-                    _uiState.update { it.copy(error = e.message) }
-                }
+                .onFailure { e -> _uiState.update { it.copy(error = e.message) } }
         }
     }
 
-    fun launchApp(packageName: String) {
-        val intent = scanner.createLaunchIntent(packageName)
-        if (intent != null) {
-            appContext.startActivity(intent)
-            viewModelScope.launch {
-                container.appRegistry.updateAppState(packageName, AppLifecycleState.ACTIVE)
-                container.lifecycleManager.recordHeartbeat(packageName)
-                refreshApps()
-            }
-        } else {
-            _uiState.update { it.copy(error = "Impossible de lancer cette application") }
+    fun launchAppInBox(packageName: String) {
+        val app = _uiState.value.apps.find { it.packageName == packageName }
+        val displayName = app?.displayName ?: packageName
+        val intent = AppBoxSessionActivity.createIntent(appContext, packageName, displayName)
+        appContext.startActivity(intent)
+        viewModelScope.launch {
+            container.appRegistry.updateAppState(packageName, AppLifecycleState.ACTIVE)
+            container.lifecycleManager.recordHeartbeat(packageName)
+            refreshApps()
         }
+    }
+
+    fun openUsageAccessSettings() {
+        appContext.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    }
+
+    fun refreshUsageAccess() {
+        _uiState.update { it.copy(hasUsageAccess = processTracker.hasUsageAccess()) }
     }
 
     fun selectApp(app: AppBoxApp?) {
@@ -189,20 +188,6 @@ class RuntimeViewModel(
         }
     }
 
-    fun suspendApp(packageName: String) {
-        viewModelScope.launch {
-            container.lifecycleManager.suspendApp(packageName)
-            refreshApps()
-        }
-    }
-
-    fun activateApp(packageName: String) {
-        viewModelScope.launch {
-            container.appRegistry.updateAppState(packageName, AppLifecycleState.ACTIVE)
-            refreshApps()
-        }
-    }
-
     fun clearError() {
         _uiState.update { it.copy(error = null) }
     }
@@ -223,17 +208,6 @@ class RuntimeViewModel(
         }
     }
 
-    private fun startClock() {
-        viewModelScope.launch {
-            val formatter = SimpleDateFormat("HH:mm", Locale.getDefault())
-            _uiState.update { it.copy(currentTime = formatter.format(Date())) }
-            while (true) {
-                delay(30_000)
-                _uiState.update { it.copy(currentTime = formatter.format(Date())) }
-            }
-        }
-    }
-
     private fun observeMonitorEvents() {
         viewModelScope.launch {
             val monitor = container.remoteMonitor
@@ -243,6 +217,14 @@ class RuntimeViewModel(
                         state.copy(monitorEvents = (state.monitorEvents + event).takeLast(100))
                     }
                 }
+            }
+        }
+    }
+
+    private fun observeProcesses() {
+        viewModelScope.launch {
+            ProcessWatchdogService.processes.collect { processes ->
+                _uiState.update { it.copy(trackedProcesses = processes) }
             }
         }
     }
