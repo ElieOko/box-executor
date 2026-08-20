@@ -40,6 +40,7 @@ import java.util.Locale
 fun AgentScreen(
     lastVoiceText: String?,
     hoshiConfig: HoshiUserConfig,
+    openAiKeyConfigured: Boolean,
     accessibilityEnabled: Boolean,
     schedules: List<ScheduledTask>,
     runs: List<WorkflowRun>,
@@ -54,7 +55,7 @@ fun AgentScreen(
             Column(modifier = Modifier.padding(14.dp)) {
                 Text("HOSHI", color = AppBoxThemeColors.Accent, fontWeight = FontWeight.Bold, fontSize = 22.sp)
                 Text(
-                    "Écoute active en permanence — dites « HOSHI » puis votre commande",
+                    "Écoute active en permanence — dites « HOSHI » puis votre commande. OpenAI activé si clé configurée.",
                     color = AppBoxThemeColors.TextSecondary,
                     fontSize = 12.sp,
                 )
@@ -79,6 +80,7 @@ fun AgentScreen(
         ) {
             HoshiConfigPanel(
                 config = hoshiConfig,
+                openAiKeyConfigured = openAiKeyConfigured,
                 accessibilityEnabled = accessibilityEnabled,
                 onConfigChange = onConfigChange,
                 onSave = onSaveConfig,

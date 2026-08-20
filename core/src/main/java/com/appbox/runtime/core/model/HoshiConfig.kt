@@ -13,4 +13,8 @@ data class HoshiUserConfig(
     val hnMinute: Int = 0,
     val voiceContinuous: Boolean = true,
     val wakeWords: List<String> = listOf("hoshi", "hey hoshi", "ok hoshi"),
+    /** Clé OpenAI — stockée localement, jamais commitée */
+    val openAiApiKey: String = "",
+    val openAiModel: String = "gpt-4o-mini",
+    val openAiEnabled: Boolean = true,
 )
