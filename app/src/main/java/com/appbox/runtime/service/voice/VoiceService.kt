@@ -51,19 +51,10 @@ class VoiceService(
     private var speechStartTime = 0L
     private var lastCommandText = ""
     private var lastCommandAt = 0L
-    private var ttsInterrupted = false
     private val commandMutex = Mutex()
 
     private val _lastTranscript = MutableSharedFlow<String>(extraBufferCapacity = 16)
     override val lastTranscript: SharedFlow<String> = _lastTranscript.asSharedFlow()
-
-    private fun interruptSpeechForUser() {
-        if (!isSpeaking) return
-        ttsInterrupted = true
-        tts?.stop()
-        isSpeaking = false
-        if (continuousEnabled) scheduleListen(delayMs = 80)
-    }
 
     private val _alwaysOn = MutableStateFlow(true)
     val alwaysOn: StateFlow<Boolean> = _alwaysOn.asStateFlow()
@@ -91,20 +82,17 @@ class VoiceService(
         applyVoiceProfile(voiceConfig)
         tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
             override fun onStart(utteranceId: String?) {
-                ttsInterrupted = false
                 isSpeaking = true
                 pauseRecognitionForTts()
             }
 
             override fun onDone(utteranceId: String?) {
-                if (ttsInterrupted) return
                 isSpeaking = false
                 resumeAfterTts()
             }
 
             @Deprecated("Deprecated in Java")
             override fun onError(utteranceId: String?) {
-                if (ttsInterrupted) return
                 isSpeaking = false
                 resumeAfterTts()
             }
@@ -240,14 +228,12 @@ class VoiceService(
         }
 
         override fun onBeginningOfSpeech() {
-            if (isSpeaking) interruptSpeechForUser()
             speechStarted = true
             speechStartTime = System.currentTimeMillis()
         }
 
         override fun onRmsChanged(rmsdB: Float) {
             if (rmsdB > peakRms) peakRms = rmsdB
-            if (isSpeaking && rmsdB > 4f) interruptSpeechForUser()
         }
 
         override fun onBufferReceived(buffer: ByteArray?) {}

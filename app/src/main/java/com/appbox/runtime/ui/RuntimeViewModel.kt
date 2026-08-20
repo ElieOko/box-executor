@@ -24,6 +24,7 @@ import com.appbox.runtime.core.model.AgentState
 import com.appbox.runtime.core.model.ScheduledTask
 import com.appbox.runtime.core.model.HoshiUserConfig
 import com.appbox.runtime.core.model.WorkflowDefinition
+import com.appbox.runtime.core.model.WorkflowEventBinding
 import com.appbox.runtime.core.model.WorkflowRun
 import com.appbox.runtime.core.model.TrackedProcess
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -68,6 +69,8 @@ data class RuntimeUiState(
     val lastVoiceText: String? = null,
     val hoshiConfig: HoshiUserConfig = HoshiUserConfig(),
     val workflowEditMode: Boolean = false,
+    val flowEditorWorkflowId: String? = null,
+    val eventBindings: List<WorkflowEventBinding> = emptyList(),
     val accessibilityEnabled: Boolean = false,
     val openAiKeyConfigured: Boolean = false,
     val conversationTurns: List<com.appbox.runtime.core.model.ConversationTurn> = emptyList(),
@@ -379,6 +382,11 @@ class RuntimeViewModel(
                 _uiState.update { it.copy(accessibilityEnabled = enabled) }
             }
         }
+        viewModelScope.launch {
+            container.eventBindingStore.bindingsFlow.collect { bindings ->
+                _uiState.update { it.copy(eventBindings = bindings) }
+            }
+        }
         container.voiceService.startContinuousListening()
         refreshAgentData()
     }
@@ -424,15 +432,98 @@ class RuntimeViewModel(
         _uiState.update { it.copy(workflowEditMode = !it.workflowEditMode) }
     }
 
-    fun onWorkflowNodeMoved(nodeId: String, x: Float, y: Float) {
-        val workflow = _uiState.value.selectedWorkflow ?: return
+    fun openFlowEditor(workflow: WorkflowDefinition) {
+        _uiState.update {
+            it.copy(
+                flowEditorWorkflowId = workflow.id,
+                selectedWorkflow = workflow,
+                workflowEditMode = false,
+            )
+        }
+    }
+
+    fun closeFlowEditor() {
+        _uiState.update { it.copy(flowEditorWorkflowId = null) }
+    }
+
+    fun expandFlowCanvas() {
+        val workflowId = _uiState.value.flowEditorWorkflowId ?: return
         viewModelScope.launch {
-            container.workflowEngine.updateNodePosition(workflow.id, nodeId, x, y)
-            val updated = container.workflowEngine.getWorkflow(workflow.id)
+            container.workflowEngine.expandCanvas(workflowId)
+                .onSuccess { updated ->
+                    _uiState.update { state ->
+                        state.copy(
+                            selectedWorkflow = updated,
+                            workflows = state.workflows.map { if (it.id == workflowId) updated else it },
+                            successMessage = "Zone étendue · ${updated.canvasWidth.toInt()}×${updated.canvasHeight.toInt()}",
+                        )
+                    }
+                }
+                .onFailure { e ->
+                    _uiState.update { it.copy(error = e.message ?: "Impossible d'étendre la zone") }
+                }
+        }
+    }
+
+    fun saveEventLoop(listenTopic: String, publishTopic: String?) {
+        val workflowId = _uiState.value.flowEditorWorkflowId ?: return
+        val topic = listenTopic.trim()
+        if (topic.isBlank()) {
+            _uiState.update { it.copy(error = "Indiquez un topic à écouter") }
+            return
+        }
+        viewModelScope.launch {
+            val workflow = _uiState.value.workflows.find { it.id == workflowId }
+            val binding = WorkflowEventBinding(
+                id = "bind_${workflowId}_${topic.hashCode()}",
+                topic = topic,
+                workflowId = workflowId,
+                label = workflow?.name ?: workflowId,
+            )
+            container.automationAgent.registerCustomEventBinding(binding)
+                .onSuccess {
+                    publishTopic?.trim()?.takeIf { it.isNotBlank() }?.let { publish ->
+                        container.workflowEngine.ensurePublishEventNode(workflowId, publish)
+                            .onSuccess { updated ->
+                                _uiState.update { state ->
+                                    state.copy(
+                                        selectedWorkflow = updated,
+                                        workflows = state.workflows.map { if (it.id == workflowId) updated else it },
+                                    )
+                                }
+                            }
+                    }
+                    _uiState.update { it.copy(successMessage = "Boucle enregistrée · $topic") }
+                }
+                .onFailure { e ->
+                    _uiState.update { it.copy(error = e.message ?: "Erreur enregistrement boucle") }
+                }
+        }
+    }
+
+    fun removeEventLoop(bindingId: String) {
+        viewModelScope.launch {
+            container.automationAgent.removeCustomEventBinding(bindingId)
+                .onSuccess {
+                    _uiState.update { it.copy(successMessage = "Boucle retirée") }
+                }
+                .onFailure { e ->
+                    _uiState.update { it.copy(error = e.message ?: "Erreur suppression boucle") }
+                }
+        }
+    }
+
+    fun onWorkflowNodeMoved(nodeId: String, x: Float, y: Float) {
+        val workflowId = _uiState.value.flowEditorWorkflowId
+            ?: _uiState.value.selectedWorkflow?.id
+            ?: return
+        viewModelScope.launch {
+            container.workflowEngine.updateNodePosition(workflowId, nodeId, x, y)
+            val updated = container.workflowEngine.getWorkflow(workflowId)
             _uiState.update { state ->
                 state.copy(
                     selectedWorkflow = updated,
-                    workflows = state.workflows.map { if (it.id == workflow.id) updated ?: it else it },
+                    workflows = state.workflows.map { if (it.id == workflowId) updated ?: it else it },
                 )
             }
         }

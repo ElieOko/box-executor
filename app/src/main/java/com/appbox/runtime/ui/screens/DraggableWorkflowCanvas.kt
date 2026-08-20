@@ -13,7 +13,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -56,8 +55,9 @@ import com.appbox.runtime.ui.theme.AppBoxThemeColors
 import kotlin.math.max
 import kotlin.math.roundToInt
 
-private const val NODE_W = 152f
-private const val NODE_H = 64f
+private const val NODE_W = 168f
+private const val NODE_H = 72f
+private const val GRID = 20f
 
 @Composable
 fun DraggableWorkflowCanvas(
@@ -71,16 +71,16 @@ fun DraggableWorkflowCanvas(
     val flowOrder = remember(workflow.id, workflow.edges) { computeFlowOrder(workflow) }
     val stepIndex = remember(flowOrder) { flowOrder.withIndex().associate { (i, id) -> id to i + 1 } }
 
-    val maxX = workflow.nodes.maxOfOrNull { it.positionX + NODE_W + 40f } ?: 900f
-    val maxY = workflow.nodes.maxOfOrNull { it.positionY + NODE_H + 80f } ?: 600f
-    val canvasWidth = max(maxX, 720f).dp
-    val canvasHeight = max(maxY, 420f).dp
+    val contentMaxX = workflow.nodes.maxOfOrNull { it.positionX + NODE_W + 80f } ?: 0f
+    val contentMaxY = workflow.nodes.maxOfOrNull { it.positionY + NODE_H + 80f } ?: 0f
+    val canvasWidthPx = max(workflow.canvasWidth, contentMaxX + 200f, 2400f)
+    val canvasHeightPx = max(workflow.canvasHeight, contentMaxY + 200f, 1600f)
 
     val dashAnim = rememberInfiniteTransition(label = "flowDash")
     val dashPhase by dashAnim.animateFloat(
         initialValue = 0f,
-        targetValue = 40f,
-        animationSpec = infiniteRepeatable(tween(1400, easing = LinearEasing), RepeatMode.Restart),
+        targetValue = 48f,
+        animationSpec = infiniteRepeatable(tween(1800, easing = LinearEasing), RepeatMode.Restart),
         label = "dashPhase",
     )
 
@@ -88,46 +88,15 @@ fun DraggableWorkflowCanvas(
         modifier = modifier
             .fillMaxSize()
             .clip(RoundedCornerShape(12.dp))
-            .background(
-                Brush.verticalGradient(
-                    listOf(Color(0xFF0C0C10), Color(0xFF12121A), Color(0xFF0A0A0E)),
-                ),
-            )
+            .background(Color(0xFF07070A))
             .horizontalScroll(hScroll)
             .verticalScroll(vScroll),
     ) {
-        Box(modifier = Modifier.size(canvasWidth, canvasHeight)) {
+        Box(modifier = Modifier.size(canvasWidthPx.dp, canvasHeightPx.dp)) {
             Canvas(modifier = Modifier.fillMaxSize()) {
+                drawGrid(canvasWidthPx, canvasHeightPx)
                 workflow.edges.forEachIndexed { index, edge ->
-                    val from = workflow.nodes.find { it.id == edge.fromNodeId } ?: return@forEachIndexed
-                    val to = workflow.nodes.find { it.id == edge.toNodeId } ?: return@forEachIndexed
-                    val start = Offset(from.positionX + NODE_W * 0.85f, from.positionY + NODE_H / 2f)
-                    val end = Offset(to.positionX + 12f, to.positionY + NODE_H / 2f)
-                    val midX = (start.x + end.x) / 2f
-                    val path = Path().apply {
-                        moveTo(start.x, start.y)
-                        cubicTo(midX, start.y, midX, end.y, end.x, end.y)
-                    }
-                    val accent = Color(0xFF3B82F6).copy(alpha = 0.35f + (index % 3) * 0.08f)
-                    drawPath(
-                        path = path,
-                        color = accent,
-                        style = Stroke(
-                            width = 3f,
-                            cap = StrokeCap.Round,
-                            pathEffect = PathEffect.dashPathEffect(floatArrayOf(18f, 12f), dashPhase),
-                        ),
-                    )
-                    drawPath(
-                        path = path,
-                        color = Color(0xFF60A5FA).copy(alpha = 0.55f),
-                        style = Stroke(width = 1.5f, cap = StrokeCap.Round),
-                    )
-                    drawCircle(
-                        color = Color(0xFF93C5FD),
-                        radius = 5f,
-                        center = end,
-                    )
+                    drawFlowEdge(workflow, edge.fromNodeId, edge.toNodeId, index, dashPhase)
                 }
             }
 
@@ -141,6 +110,70 @@ fun DraggableWorkflowCanvas(
             }
         }
     }
+}
+
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawGrid(width: Float, height: Float) {
+    val gridColor = Color(0xFF1E293B).copy(alpha = 0.45f)
+    var x = 0f
+    while (x <= width) {
+        drawLine(gridColor, Offset(x, 0f), Offset(x, height), strokeWidth = 1f)
+        x += GRID * 4
+    }
+    var y = 0f
+    while (y <= height) {
+        drawLine(gridColor, Offset(0f, y), Offset(width, y), strokeWidth = 1f)
+        y += GRID * 4
+    }
+}
+
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawFlowEdge(
+    workflow: WorkflowDefinition,
+    fromId: String,
+    toId: String,
+    index: Int,
+    dashPhase: Float,
+) {
+    val from = workflow.nodes.find { it.id == fromId } ?: return
+    val to = workflow.nodes.find { it.id == toId } ?: return
+    val start = Offset(from.positionX + NODE_W * 0.92f, from.positionY + NODE_H / 2f)
+    val end = Offset(to.positionX + 16f, to.positionY + NODE_H / 2f)
+    val dx = (end.x - start.x) * 0.45f
+    val path = Path().apply {
+        moveTo(start.x, start.y)
+        cubicTo(start.x + dx, start.y, end.x - dx, end.y, end.x, end.y)
+    }
+    drawPath(
+        path = path,
+        color = Color(0xFF2563EB).copy(alpha = 0.18f),
+        style = Stroke(width = 10f, cap = StrokeCap.Round),
+    )
+    drawPath(
+        path = path,
+        color = Color(0xFF60A5FA).copy(alpha = 0.55f + (index % 2) * 0.1f),
+        style = Stroke(
+            width = 3.5f,
+            cap = StrokeCap.Round,
+            pathEffect = PathEffect.dashPathEffect(floatArrayOf(22f, 14f), dashPhase),
+        ),
+    )
+    drawPath(
+        path = path,
+        color = Color(0xFFBFDBFE).copy(alpha = 0.85f),
+        style = Stroke(width = 1.5f, cap = StrokeCap.Round),
+    )
+    val arrowAngle = kotlin.math.atan2(end.y - start.y, end.x - (start.x + dx))
+    val arrowLen = 14f
+    val tip = end
+    val left = Offset(
+        tip.x - arrowLen * kotlin.math.cos(arrowAngle - 0.45f),
+        tip.y - arrowLen * kotlin.math.sin(arrowAngle - 0.45f),
+    )
+    val right = Offset(
+        tip.x - arrowLen * kotlin.math.cos(arrowAngle + 0.45f),
+        tip.y - arrowLen * kotlin.math.sin(arrowAngle + 0.45f),
+    )
+    drawLine(Color(0xFF93C5FD), left, tip, strokeWidth = 3f, cap = StrokeCap.Round)
+    drawLine(Color(0xFF93C5FD), right, tip, strokeWidth = 3f, cap = StrokeCap.Round)
 }
 
 @Composable
@@ -165,59 +198,59 @@ private fun FlowNodeCard(
             .offset(offsetX.roundToInt().dp, offsetY.roundToInt().dp)
             .width(NODE_W.dp)
             .height(NODE_H.dp)
-            .shadow(if (editMode) 8.dp else 4.dp, RoundedCornerShape(14.dp))
-            .clip(RoundedCornerShape(14.dp))
-            .background(
-                Brush.linearGradient(listOf(palette.top, palette.bottom)),
-            )
-            .border(1.dp, borderColor.copy(alpha = 0.7f), RoundedCornerShape(14.dp))
+            .shadow(if (editMode) 10.dp else 5.dp, RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(16.dp))
+            .background(Brush.linearGradient(listOf(palette.top, palette.bottom)))
+            .border(1.5.dp, borderColor.copy(alpha = 0.75f), RoundedCornerShape(16.dp))
             .then(
                 if (editMode) {
                     Modifier.pointerInput(node.id) {
-                        detectDragGestures { _, dragAmount ->
-                            offsetX = (offsetX + dragAmount.x).coerceAtLeast(0f)
-                            offsetY = (offsetY + dragAmount.y).coerceAtLeast(0f)
-                            onNodeMoved(node.id, offsetX, offsetY)
+                        detectDragGestures(
+                            onDragEnd = {
+                                val snappedX = snap(offsetX)
+                                val snappedY = snap(offsetY)
+                                offsetX = snappedX
+                                offsetY = snappedY
+                                onNodeMoved(node.id, snappedX, snappedY)
+                            },
+                        ) { _, dragAmount ->
+                            offsetX = (offsetX + dragAmount.x).coerceIn(0f, 5000f)
+                            offsetY = (offsetY + dragAmount.y).coerceIn(0f, 3400f)
                         }
                     }
                 } else {
                     Modifier
                 },
             )
-            .padding(horizontal = 10.dp, vertical = 8.dp),
+            .padding(horizontal = 12.dp, vertical = 10.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (step != null) {
                 Box(
                     modifier = Modifier
-                        .size(22.dp)
+                        .size(26.dp)
                         .clip(CircleShape)
-                        .background(palette.accent.copy(alpha = 0.35f)),
+                        .background(palette.accent.copy(alpha = 0.4f)),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Text(
-                        step.toString(),
-                        color = AppBoxThemeColors.TextPrimary,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                    )
+                    Text(step.toString(), color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                 }
             }
             Column(
                 modifier = Modifier
-                    .padding(start = if (step != null) 8.dp else 0.dp)
+                    .padding(start = if (step != null) 10.dp else 0.dp)
                     .weight(1f),
             ) {
                 Text(
                     node.label.ifBlank { node.type.name.replace('_', ' ') },
                     color = AppBoxThemeColors.TextPrimary,
-                    fontSize = 11.sp,
+                    fontSize = 12.sp,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    node.type.name.replace('_', ' '),
+                    if (editMode) "Glisser · grille ${GRID.toInt()}px" else node.type.name.replace('_', ' '),
                     color = AppBoxThemeColors.TextTertiary,
                     fontSize = 9.sp,
                     maxLines = 1,
@@ -226,6 +259,8 @@ private fun FlowNodeCard(
         }
     }
 }
+
+private fun snap(value: Float): Float = kotlin.math.round(value / GRID) * GRID
 
 private data class NodePalette(val top: Color, val bottom: Color, val accent: Color, val border: Color)
 
@@ -236,6 +271,8 @@ private fun nodePalette(type: WorkflowNodeType): NodePalette = when {
         NodePalette(Color(0xFF7C2D12), Color(0xFF431407), Color(0xFFF97316), Color(0xFFEA580C))
     type.name.contains("PLATFORM") -> NodePalette(Color(0xFF312E81), Color(0xFF1E1B4B), Color(0xFF818CF8), Color(0xFF6366F1))
     type.name.contains("SPEAK") -> NodePalette(Color(0xFF4A044E), Color(0xFF2E1065), Color(0xFFC084FC), Color(0xFFA855F7))
+    type.name.contains("PUBLISH") || type.name.contains("SEND_EMAIL") ->
+        NodePalette(Color(0xFF713F12), Color(0xFF422006), Color(0xFFFBBF24), Color(0xFFF59E0B))
     type.name.contains("LAUNCH") || type.name.contains("OPEN_SYSTEM") ->
         NodePalette(Color(0xFF134E4A), Color(0xFF042F2E), Color(0xFF2DD4BF), Color(0xFF14B8A6))
     else -> NodePalette(Color(0xFF27272A), Color(0xFF18181B), Color(0xFF71717A), Color(0xFF52525B))
@@ -243,8 +280,8 @@ private fun nodePalette(type: WorkflowNodeType): NodePalette = when {
 
 private fun computeFlowOrder(workflow: WorkflowDefinition): List<String> {
     if (workflow.nodes.isEmpty()) return emptyList()
-    val triggers = workflow.nodes.filter { it.type.name.startsWith("TRIGGER_") }.map { it.id }
-    val start = triggers.firstOrNull() ?: workflow.nodes.first().id
+    val start = workflow.nodes.firstOrNull { it.type.name.startsWith("TRIGGER_") }?.id
+        ?: workflow.nodes.first().id
     val outgoing = workflow.edges.groupBy { it.fromNodeId }.mapValues { e -> e.value.map { it.toNodeId } }
     val visited = mutableSetOf<String>()
     val order = mutableListOf<String>()
@@ -257,3 +294,5 @@ private fun computeFlowOrder(workflow: WorkflowDefinition): List<String> {
     workflow.nodes.map { it.id }.filter { it !in visited }.forEach { walk(it) }
     return order
 }
+
+private fun max(a: Float, b: Float, c: Float): Float = maxOf(a, b, c)

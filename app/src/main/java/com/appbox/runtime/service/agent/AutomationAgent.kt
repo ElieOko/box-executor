@@ -37,6 +37,7 @@ class AutomationAgent(
     private val preferences: HoshiPreferencesStore,
     private val memory: HoshiMemoryStore,
     private val contactGroups: ContactGroupStore,
+    private val eventBindings: com.appbox.runtime.service.workflow.WorkflowEventBindingStore,
     private val installedAppScanner: com.appbox.runtime.service.manager.InstalledAppScanner,
     private val appRegistry: com.appbox.runtime.core.contract.AppRegistryContract,
     private val openAiClient: OpenAiClient = OpenAiClient(),
@@ -58,6 +59,7 @@ class AutomationAgent(
     fun conversationFlow(): Flow<List<com.appbox.runtime.core.model.ConversationTurn>> = memory.conversationFlow
 
     private var eventJobStarted = false
+    private var customEventBindings: List<com.appbox.runtime.core.model.WorkflowEventBinding> = emptyList()
 
     override suspend fun start(): Result<Unit> = runCatching {
         userConfig = preferences.getConfig()
@@ -128,7 +130,23 @@ class AutomationAgent(
                 updatedAt = System.currentTimeMillis(),
             )
             log(AgentLogLevel.INFO, "${workflows.size} workflows HOSHI actifs")
+            refreshCustomEventBindings()
         }
+    }
+
+    suspend fun refreshCustomEventBindings() {
+        customEventBindings = eventBindings.load().filter { it.enabled }
+    }
+
+    suspend fun registerCustomEventBinding(binding: com.appbox.runtime.core.model.WorkflowEventBinding): Result<Unit> =
+        runCatching {
+            eventBindings.upsert(binding)
+            refreshCustomEventBindings()
+        }
+
+    suspend fun removeCustomEventBinding(bindingId: String): Result<Unit> = runCatching {
+        eventBindings.remove(bindingId)
+        refreshCustomEventBindings()
     }
 
     override suspend fun handleCommand(command: AgentCommand): Result<WorkflowRun?> {
@@ -370,18 +388,21 @@ class AutomationAgent(
 
     override suspend fun handleEvent(event: AppBoxEvent): Result<WorkflowRun?> {
         val file = instructions ?: return Result.success(null)
-        val mapping = file.agent.eventTriggers.firstOrNull { it.topic == event.topic }
+        val instructionMapping = file.agent.eventTriggers.firstOrNull { it.topic == event.topic }
+        val customMapping = customEventBindings.firstOrNull { it.topic == event.topic }
+        val workflowId = instructionMapping?.workflowId ?: customMapping?.workflowId
             ?: return Result.success(null)
 
-        val params = mapping.parameterMapping.toMutableMap()
+        val params = instructionMapping?.parameterMapping?.toMutableMap() ?: mutableMapOf()
         params["event_payload"] = event.payload
         params["event_topic"] = event.topic
 
+        log(AgentLogLevel.INFO, "Événement ${event.topic} → $workflowId", workflowId)
         return handleCommand(
             AgentCommand(
                 id = UUID.randomUUID().toString(),
                 source = AgentCommandSource.EVENT_BUS,
-                action = mapping.workflowId,
+                action = workflowId,
                 parameters = params,
             ),
         )
